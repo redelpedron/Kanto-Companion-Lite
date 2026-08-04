@@ -47,10 +47,6 @@ The overlay is read-only. Panels scale to your window (designed against
 
 - **Drag** an item to the other side, or **tap** it then **tap** the other
   side.
-- Picking up a stack takes the whole stack. *(Adjusting the quantity before
-  dropping used to be mouse-wheel only on the desktop version — there's no
-  touch equivalent yet, so partial-stack transfers aren't currently possible
-  in this fork.)*
 - **Sort** each side by Type / A–Z / Qty (view only). On the **Bag** you can
   **Save order** to make it stick in-game; the in-game **PC is always A–Z**, so
   its sort is browsing-only.
