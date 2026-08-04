@@ -1,0 +1,12 @@
+{
+  "id": "kanto_companion_lite",
+  "name": "Kanto Companion Lite",
+  "version": "1.0.0",
+  "entry": "main.lua",
+  "api": 2,
+  "profile": "content",
+  "category": "OTHER",
+  "affects_link": false,
+  "permissions": ["engine_internals"],
+  "description": "A stripped-down fork of Kanto Companion by @matthew.me, redesigned for Android. Keyboard shortcuts have been replaced with touch controls for a mobile-friendly experience while retaining the companion's core features. This is a fan-made project and is not affiliated with or endorsed by Nintendo, Game Freak, or The Pokémon Company."
+}
