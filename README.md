@@ -8,6 +8,25 @@ there are no keyboard shortcuts and no mouse-wheel dependencies.
 
 > **Fan-made; not affiliated with or endorsed by Nintendo / Game Freak / The Pokémon Company.**
 
+## Table of Contents
+
+- [Built On](#built-on)
+- [On-screen buttons](#on-screen-buttons)
+- [Overlay](#overlay)
+- [Items (Bag ⇄ PC)](#items-bag--pc)
+- [Party / Boxes](#party--boxes)
+- [Notes](#notes)
+- [Demos](#demos)
+
+## Built On
+
+This addon is a mod for [**Gen1Recomp**](https://github.com/bryanthaboi/gen1recomp),
+a native LÖVE2D recreation of Pokémon Red and Blue (game data and graphics
+are decoded at runtime from a legally-supplied ROM; no ROM or decompiled
+assets ship with the base project). Gen1Recomp is where this addon is loaded
+and used — install it through Gen1Recomp's mod manager (**F10** in-game) as
+described in its own [README](https://github.com/bryanthaboi/gen1recomp#modding).
+
 ## On-screen buttons
 
 Three round buttons sit in the bottom-right corner, above the D-pad/A-B controls

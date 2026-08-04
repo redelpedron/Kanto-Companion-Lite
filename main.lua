@@ -484,7 +484,12 @@ return function(mod)
       -- overshooting by 11-12px on every row, which is most of the excess
       -- whitespace before the divider.
       local headerH = isLandscape and 54 or 43
-      if style == 2 or m.active then
+      if style == 2 then
+        -- compact grid/list row: header + XP bar cushion + one PP-only line
+        local ppLineH = (m.moves and #m.moves > 0) and (isLandscape and 20 or 18) or 0
+        return headerH + (isLandscape and 12 or 10) + ppLineH
+      end
+      if m.active then
         -- no moves shown: just enough extra for the XP bar + a little cushion
         return headerH + (isLandscape and 12 or 10)
       end
@@ -530,6 +535,23 @@ return function(mod)
       txt(numStr, x + w, cy + 1, lvSz, COL.text, "right", 0.9)
       cy = cy + (isLandscape and 22 or 18)
       if m.xpProgress ~= nil then bar(x + bodyX, cy, bodyW, (isLandscape and 8 or 6), m.xpProgress, COL.xp) end
+      -- Compact PP-only readout (style 2): no room for move names in a grid
+      -- cell, so just the PP fractions, each colored by effectiveness against
+      -- the current opponent -- same tier colors as the Battle page uses.
+      if style == 2 and m.moves and #m.moves > 0 then
+        cy = cy + (isLandscape and 20 or 16)
+        local mf = isLandscape and 14 or 13
+        local dashW = textW("  -  ", mf)
+        local dx = x + bodyX
+        for i, mv in ipairs(m.moves) do
+          if i > 1 then txt("-", dx, cy, mf, COL.dim, nil, 0.5); dx = dx + dashW end
+          local pp = (mv.pp ~= nil and mv.maxpp ~= nil) and (mv.pp.."/"..mv.maxpp) or "—"
+          local tier = (mv.mult == nil) and COL.text
+            or (mv.mult == 0 and COL.lo or (mv.mult > 10 and COL.super or (mv.mult == 10 and COL.dim or COL.resist)))
+          txt(pp, dx, cy, mf, tier)
+          dx = dx + textW(pp, mf)
+        end
+      end
       -- Bench-only moves/PP list (style 3): the active mon's moves are already
       -- visible in the battle panel, so skip repeating them here.
       if style == 3 and not m.active and m.moves and #m.moves > 0 then
@@ -613,6 +635,35 @@ return function(mod)
       -- the active row's highlight box already extends 6px past rh into this
       -- gap, so it needs slightly less than the standard row gap on top
       cy = cy + (m.active and 8 or 10)
+    end
+    return h
+  end
+
+  -- 2-column grid variant, for the portrait battle carousel's Party page only:
+  -- that page has no adjacent battle panel and no moves shown either way (the
+  -- carousel's own "battle" page covers that), so a compact grid fits more of
+  -- the party on screen at once than one tall single-file list. Reuses
+  -- drawMonRow's style-2 rendering (sprite/name/HP/XP, no moves) per cell.
+  local function partyGrid(st, x, y, w)
+    local list = st.party or {}
+    local cols = 2
+    local rows = math.max(1, math.ceil(#list / cols))
+    local gap = 14
+    local cellW = (w - PAD*2 - gap*(cols-1)) / cols
+    local cellH = 60
+    for _, m in ipairs(list) do cellH = math.max(cellH, measureMon(m, 2)) end
+    local topY0 = y + PAD + 34 + 8
+    local h = (topY0 - y) + rows*cellH + (rows-1)*gap + PAD
+    panel(x, y, w, h, false)
+    txt("Active Party", x + PAD, y + PAD, 28, COL.text)
+    txt("B  ·  " .. #list .. "/6", x + w - PAD, y + PAD + 10, 14, COL.dim, "right")
+    for i, m in ipairs(list) do
+      local col = (i - 1) % cols
+      local row = math.floor((i - 1) / cols)
+      local cx = x + PAD + col * (cellW + gap)
+      local cy2 = topY0 + row * (cellH + gap)
+      if m.active then setc(COL.gold, 0.10); rrect("fill", cx - 6, cy2 - 6, cellW + 12, cellH + 12, 8) end
+      drawMonRow(m, cx, cy2, cellW, "p" .. i, 2)
     end
     return h
   end
@@ -1867,7 +1918,7 @@ return function(mod)
         local ph
         if kind == "battle" then ph = battle(st, margin, margin, nil)
         elseif kind == "items" then ph = items(st, margin, margin, pw)
-        elseif kind == "party" then ph = party(st, margin, margin, 3, pw) end
+        elseif kind == "party" then ph = partyGrid(st, margin, margin, pw) end
         pageDots(margin, margin + (ph or 0) + 16, #pages, C.rightPage, pw)
         return
       end
@@ -1884,7 +1935,7 @@ return function(mod)
         if C.rightPage < 1 or C.rightPage > #pages then C.rightPage = 1 end
         local kind = pages[C.rightPage]
         local ph
-        if kind == "party" then ph = party(st, margin, margin, 2, pw)
+        if kind == "party" then ph = partyGrid(st, margin, margin, pw)
         elseif kind == "trainer" then ph = trainer(st, margin, margin, pw)
         elseif kind == "items" then ph = items(st, margin, margin, pw)
         elseif kind == "route" then ph = route(st, margin, margin, pw) end
