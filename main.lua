@@ -479,9 +479,16 @@ return function(mod)
     if style == 2 or style == 3 then
       local W, H = love.graphics.getDimensions()
       local isLandscape = (W / H) > 1.2
-      local headerH = isLandscape and 66 or 54
-      if style == 2 or m.active then return headerH end
-      local gap, rh2, pad = (isLandscape and 26 or 18), (isLandscape and 24 or 20), (isLandscape and 10 or 8)
+      -- headerH must match exactly what drawMonRow draws for name+HP-bar
+      -- before anything else (moves, or the row just ending) -- it was
+      -- overshooting by 11-12px on every row, which is most of the excess
+      -- whitespace before the divider.
+      local headerH = isLandscape and 54 or 43
+      if style == 2 or m.active then
+        -- no moves shown: just enough extra for the XP bar + a little cushion
+        return headerH + (isLandscape and 12 or 10)
+      end
+      local gap, rh2, pad = (isLandscape and 26 or 18), (isLandscape and 24 or 20), 0
       return headerH + gap + moveRows(m) * rh2 + pad
     end
     local hasTypes = m.types and #m.types > 0
@@ -588,8 +595,8 @@ return function(mod)
     local w = widthOverride or COLW; local style = styleOverride or C.partyStyle or 1
     local list = st.party or {}
     local h = PAD + 34 + 8
-    for _, m in ipairs(list) do h = h + measureMon(m, style) + 14 end
-    h = h + PAD - 14
+    for _, m in ipairs(list) do h = h + measureMon(m, style) + (m.active and 8 or 10) end
+    h = h + PAD - 10
     panel(x, y, w, h, false)
     txt("Active Party", x + PAD, y + PAD, 28, COL.text)
     txt(((style == 2 or style == 3) and "B" or "A") .. "  ·  " .. #list .. "/6", x + w - PAD, y + PAD + 10, 14, COL.dim, "right")
@@ -601,9 +608,11 @@ return function(mod)
       cy = cy + rh
       if i < #list then
         setc(COL.border, 0.10); love.graphics.setLineWidth(math.max(1, s))
-        love.graphics.line((x+PAD)*s, math.floor((cy+7)*s), (x+w-PAD)*s, math.floor((cy+7)*s))
+        love.graphics.line((x+PAD)*s, math.floor((cy+5)*s), (x+w-PAD)*s, math.floor((cy+5)*s))
       end
-      cy = cy + 14
+      -- the active row's highlight box already extends 6px past rh into this
+      -- gap, so it needs slightly less than the standard row gap on top
+      cy = cy + (m.active and 8 or 10)
     end
     return h
   end
@@ -1811,19 +1820,20 @@ return function(mod)
     -- TODO: Implement with separate rendering approach
   end
 
-  local function pageDots(x, y, count, active, totalW, big)
-    local dotR, gap = big and 13 or 7, big and 26 or 18
+  local function pageDots(x, y, count, active, totalW)
+    -- Indicator only -- navigation happens via swipe, so these are small and not tappable.
+    local dotR, gap = 5, 12
     local rowW = count * (dotR * 2) + (count - 1) * gap
     local startX = x + math.max(0, (totalW - rowW) / 2)
-    local padX, padY = big and 16 or 10, big and 11 or 6
-    setc(COL.panel, 0.9)
-    rrect("fill", startX - padX, y - padY, rowW + padX * 2, dotR * 2 + padY * 2, big and 14 or 10)
+    local padX, padY = 8, 5
+    setc(COL.panel, 0.85)
+    rrect("fill", startX - padX, y - padY, rowW + padX * 2, dotR * 2 + padY * 2, 8)
     for i = 1, count do
       local cx = startX + (i - 1) * (dotR * 2 + gap)
-      setc(i == active and COL.gold or COL.dim, i == active and 1 or 0.9)
+      setc(i == active and COL.gold or COL.dim, i == active and 1 or 0.8)
       rrect("fill", cx, y, dotR * 2, dotR * 2, dotR)
     end
-    C.rightDots = { x = startX, y = y, w = rowW, h = dotR * 2, count = count }
+    C.rightDots = { count = count }   -- swipe handler still needs to know the page count
     return dotR * 2 + padY * 2
   end
 
@@ -1858,7 +1868,7 @@ return function(mod)
         if kind == "battle" then ph = battle(st, margin, margin, nil)
         elseif kind == "items" then ph = items(st, margin, margin, pw)
         elseif kind == "party" then ph = party(st, margin, margin, 3, pw) end
-        pageDots(margin, margin + (ph or 0) + 16, #pages, C.rightPage, pw, true)
+        pageDots(margin, margin + (ph or 0) + 16, #pages, C.rightPage, pw)
         return
       end
 
@@ -1879,7 +1889,7 @@ return function(mod)
         elseif kind == "items" then ph = items(st, margin, margin, pw)
         elseif kind == "route" then ph = route(st, margin, margin, pw) end
         -- Position dots below the panel with some spacing to avoid obstruction
-        pageDots(margin, margin + (ph or 0) + 20, #pages, C.rightPage, pw, true)
+        pageDots(margin, margin + (ph or 0) + 20, #pages, C.rightPage, pw)
         return
       end
 
@@ -1920,7 +1930,7 @@ return function(mod)
         local ph = (kind == "battle") and battle(st, rx, ry, nil, colW) or items(st, rx, ry, colW)
         unclip()
         local dotsY = math.min(ry + (ph or 0) + 10, margin + maxColH - 40)
-        pageDots(rx, dotsY, #pages, C.rightPage, colW, true)
+        pageDots(rx, dotsY, #pages, C.rightPage, colW)
       else
         -- EXPLORATION: Trainer + Spawns always both visible, no Items, no pagination
         clip(rx, ry, colW, maxColH)
@@ -2030,19 +2040,6 @@ return function(mod)
           elseif c.openScreen then
             c.openScreen("party")
           end
-          return
-        end
-      end
-      -- carousel page-dot click (jump to that page)
-      if c and c.rightDots and button == 1 then
-        local s2 = love.graphics.getHeight() / REF_H
-        local dx, dy = x/s2, y/s2
-        local r = c.rightDots
-        if dx >= r.x - 10 and dx <= r.x + r.w + 10 and dy >= r.y - 8 and dy <= r.y + r.h + 8 then
-          local idx = math.floor((dx - r.x) / (r.w / r.count)) + 1
-          if idx < 1 then idx = 1 end
-          if idx > r.count then idx = r.count end
-          c.rightPage = idx
           return
         end
       end
