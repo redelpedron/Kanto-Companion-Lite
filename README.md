@@ -57,7 +57,11 @@ Layout adapts to orientation:
   fight) on the right, side by side.
 - **Portrait** — a single full-width panel at a time; swipe left/right to
   page through Party / Trainer / Items / Route (or Battle / Items / Party
-  during a fight), with dots showing your position.
+  during a fight), with dots showing your position. The Party page here is a
+  compact 2-column grid, and move sets are simplified to just current/max PP
+  (no room for move names at this width) — each PP value is still colored by
+  matchup effectiveness against whatever you're fighting, so the moves worth
+  using still stand out at a glance.
 
 The overlay is read-only. Panels scale to your window (designed against
 1440p); since the game renders widescreen they sit over the sides of the view.
