@@ -76,3 +76,7 @@ The overlay is read-only. Panels scale to your window (designed against
 - Android-only fork: keyboard shortcuts, mouse-wheel scrolling/quantity
   adjustment, right-click-to-cancel, and desktop cursor handling have all been
   removed in favor of touch-only controls.
+
+## Demos
+
+- 🎥 [Demos](https://github.com/redelpedron/Kanto-Companion-Lite/releases/tag/demos)
