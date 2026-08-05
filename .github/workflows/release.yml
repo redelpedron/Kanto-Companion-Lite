@@ -17,6 +17,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate mod
+        run: |
+          python3 ../gen1recomp/tools/modkit.py validate . --strict
+
       - name: Create ZIP archive
         run: |
           zip -r "Kanto.Companion.Lite.zip" . \
@@ -32,5 +41,3 @@ jobs:
           generate_release_notes: true
           files: |
             Kanto.Companion.Lite.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
