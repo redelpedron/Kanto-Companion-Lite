@@ -75,12 +75,21 @@ return function(mod)
     return img or nil
   end
 
-  -- Gym-badge spritesheet (16px wide; each gym badge tile is at (0, i*32+16),
-  -- in the same gym order as Badges.list). Cached; nearest-filtered for crisp
-  -- pixels when scaled up.
+  -- Gym-badge spritesheet: original icons bundled with this mod under its own
+  -- assets/ folder (see assets/badges.png) -- NOT the game's private
+  -- ROM-derived asset cache, which mods aren't allowed to reference directly
+  -- (modkit validate: MK301). Same 16px-wide, 32px-stride, +16 offset layout
+  -- the old sheet used, so the quad math below is unchanged.
+  -- NOTE: mod.path is my best-informed guess at the sanctioned mod-relative
+  -- asset path per the wiki's Art Pipeline / Mod Object docs (confirmed audio
+  -- assets load from a mod's own assets/ folder the same way) -- I couldn't
+  -- get the exact engine source in front of me to confirm the field name
+  -- byte-for-byte, so if `modkit validate` still complains here, check that
+  -- one detail against the real docs.
   local function badgeSheet()
     if C.badgeSheet == nil then
-      local ok, img = pcall(love.graphics.newImage, "assets/generated/trainer_card/badges.png")
+      local path = (mod.path and (mod.path .. "/assets/badges.png")) or "assets/badges.png"
+      local ok, img = pcall(love.graphics.newImage, path)
       if ok and img then
         img:setFilter("nearest", "nearest")
         local iw, ih = img:getDimensions()
@@ -132,6 +141,18 @@ return function(mod)
     if not (stk and stk.states and #stk.states > 0) then return false end
     local top = stk.states[#stk.states]
     return type(top) == "table" and top.items ~= nil and top.index ~= nil and top.screenId ~= nil
+  end
+
+  -- True once the player is actually playing: a save is loaded, they own at
+  -- least one Pokémon (so definitely past the title screen and the opening
+  -- intro, before which the party is empty), and the game's own Start/Bag/PC
+  -- menu isn't the thing currently on screen. The on-screen buttons should
+  -- only appear once all of that holds.
+  local function inGame()
+    if not (C.game and C.game.save) then return false end
+    if menuOpen() then return false end
+    local st = C.state
+    return st ~= nil and st.active and st.party ~= nil and #st.party > 0
   end
 
   local function buildState()
@@ -1744,7 +1765,7 @@ return function(mod)
   -- Compose: draw everything, anchored to the window edges (widescreen).
   -- ---------------------------------------------------------------------
       C.drawToggleButton = function()
-    if not (C.game and C.game.save) then return end
+    if not inGame() then return end
     local W, H = love.graphics.getDimensions()
     s = H / REF_H
     love.graphics.push("all")
@@ -1779,7 +1800,7 @@ return function(mod)
   end
 
   C.drawBackpackButton = function()
-    if not (C.game and C.game.save) then return end
+    if not inGame() then return end
     if not C.visible then return end  -- Only show when overlay is visible
     local W, H = love.graphics.getDimensions()
     s = H / REF_H
@@ -1825,7 +1846,7 @@ return function(mod)
   end
 
   C.drawPartyButton = function()
-    if not (C.game and C.game.save) then return end
+    if not inGame() then return end
     if not C.visible then return end  -- Only show when overlay is visible
     local W, H = love.graphics.getDimensions()
     s = H / REF_H
@@ -1997,136 +2018,145 @@ return function(mod)
 
 
   -- ---------------------------------------------------------------------
-  -- Hooks (guarded so hot-reload doesn't double-wrap)
+  -- Hooks (installed once the game is actually ready, not at mod-load time)
   -- ---------------------------------------------------------------------
-  if not C.wrappedUpdate and C.game and C.game.update then
-    C.origUpdate = C.game.update
-    C.game.update = function(self, dt)
-      C.origUpdate(self, dt)
-      local c = _G.__KANTO_INGAME; if c and c.onFrame then pcall(c.onFrame, dt) end
+  -- `love.*` doesn't exist yet during modkit's headless `validate` load (it
+  -- loads this file to check for load-time errors, but never runs the game
+  -- loop or fires lifecycle events) -- touching it unconditionally at the
+  -- top level, like this used to, is exactly MK100. Deferring into the same
+  -- game.ready event the file already uses above for C.game means none of
+  -- this runs until a real game session actually starts. `love` is checked
+  -- too, defensively, since it costs nothing and this is worth being sure of.
+  mod.events:on("game.ready", function()
+    if not C.wrappedUpdate and C.game and C.game.update then
+      C.origUpdate = C.game.update
+      C.game.update = function(self, dt)
+        C.origUpdate(self, dt)
+        local c = _G.__KANTO_INGAME; if c and c.onFrame then pcall(c.onFrame, dt) end
+      end
+      C.wrappedUpdate = true
     end
-    C.wrappedUpdate = true
-  end
-  if not C.wrappedDraw then
-    C.origDraw = love.draw
-    love.draw = function(...)
-      if C.origDraw then C.origDraw(...) end
-      local c = _G.__KANTO_INGAME
-      if c and c.drawOverlay then
-        local ok, err = pcall(c.drawOverlay)
-        if not ok and err ~= c.drawErr then c.drawErr = err; mod.log:error("kanto_ingame draw: %s", tostring(err)) end
-      end
-      if c and c.drawToggleButton then
-        local ok, err = pcall(c.drawToggleButton)
-        if not ok and err ~= c.toggleErr then c.toggleErr = err; mod.log:error("kanto_ingame toggle: %s", tostring(err)) end
-      end
-      if c and c.drawBackpackButton then
-        local ok, err = pcall(c.drawBackpackButton)
-        if not ok and err ~= c.backpackErr then c.backpackErr = err; mod.log:error("kanto_ingame backpack: %s", tostring(err)) end
-      end
-      if c and c.drawPartyButton then
-        local ok, err = pcall(c.drawPartyButton)
-        if not ok and err ~= c.partyBtnErr then c.partyBtnErr = err; mod.log:error("kanto_ingame party button: %s", tostring(err)) end
-      end
-      if c and c.drawBackpackMenu then
-        -- Disabled - causes graphics stack overflow
-        -- local ok, err = pcall(c.drawBackpackMenu)
-        -- if not ok and err ~= c.menuErr then c.menuErr = err; mod.log:error("kanto_ingame menu: %s", tostring(err)) end
-      end
-      if c and c.screen and c.drawScreen then
-        local ok, err = pcall(c.drawScreen)
-        if not ok and err ~= c.screenErr then c.screenErr = err; mod.log:error("kanto_ingame screen: %s", tostring(err)) end
-      end
-    end
-    C.wrappedDraw = true
-  end
-  -- Global keybinds removed (Android-only fork, no physical keyboard) --
-  -- overlay visibility and screen-opening are handled by the on-screen
-  -- toggle/backpack/party buttons instead. See onScreenKey for the one
-  -- remaining key check (escape / Android back button, while a screen is open).
-  if not C.wrappedMouse then
-    C.origMousepressed = love.mousepressed
-    love.mousepressed = function(x, y, button, ...)
-      local c = _G.__KANTO_INGAME
-      if c and c.screen and c.onScreenMouse then pcall(c.onScreenMouse, x, y, button); return end
-      -- Store swipe start position for carousel navigation
-      if c and button == 1 then
-        local s2 = love.graphics.getHeight() / REF_H
-        c.swipeStartX = x / s2
-        c.swipeStartY = y / s2
-        c.swipeStartTime = love.timer.getTime()
-      end
-      -- toggle button click (when no screen is open)
-      if c and c.toggleBtn and button == 1 then
-        local s2 = love.graphics.getHeight() / REF_H
-        local dx, dy = x/s2, y/s2
-        local b = c.toggleBtn
-        if dx >= b.x and dx <= b.x+b.w and dy >= b.y and dy <= b.y+b.h then
-          c.visible = not c.visible
-          return
+    if not C.wrappedDraw and love then
+      C.origDraw = love.draw
+      love.draw = function(...)
+        if C.origDraw then C.origDraw(...) end
+        local c = _G.__KANTO_INGAME
+        if c and c.drawOverlay then
+          local ok, err = pcall(c.drawOverlay)
+          if not ok and err ~= c.drawErr then c.drawErr = err; mod.log:error("kanto_ingame draw: %s", tostring(err)) end
+        end
+        if c and c.drawToggleButton then
+          local ok, err = pcall(c.drawToggleButton)
+          if not ok and err ~= c.toggleErr then c.toggleErr = err; mod.log:error("kanto_ingame toggle: %s", tostring(err)) end
+        end
+        if c and c.drawBackpackButton then
+          local ok, err = pcall(c.drawBackpackButton)
+          if not ok and err ~= c.backpackErr then c.backpackErr = err; mod.log:error("kanto_ingame backpack: %s", tostring(err)) end
+        end
+        if c and c.drawPartyButton then
+          local ok, err = pcall(c.drawPartyButton)
+          if not ok and err ~= c.partyBtnErr then c.partyBtnErr = err; mod.log:error("kanto_ingame party button: %s", tostring(err)) end
+        end
+        if c and c.drawBackpackMenu then
+          -- Disabled - causes graphics stack overflow
+          -- local ok, err = pcall(c.drawBackpackMenu)
+          -- if not ok and err ~= c.menuErr then c.menuErr = err; mod.log:error("kanto_ingame menu: %s", tostring(err)) end
+        end
+        if c and c.screen and c.drawScreen then
+          local ok, err = pcall(c.drawScreen)
+          if not ok and err ~= c.screenErr then c.screenErr = err; mod.log:error("kanto_ingame screen: %s", tostring(err)) end
         end
       end
-      -- backpack button click (open backpack/PC menu)
-      if c and c.backpackBtn and button == 1 then
-        local s2 = love.graphics.getHeight() / REF_H
-        local dx, dy = x/s2, y/s2
-        local b = c.backpackBtn
-        if dx >= b.x and dx <= b.x+b.w and dy >= b.y and dy <= b.y+b.h then
-          if c.screen == "items" then
-            if c.closeScreen then c.closeScreen() end
-          elseif c.openScreen then
-            c.openScreen("items")
+      C.wrappedDraw = true
+    end
+    -- Global keybinds removed (Android-only fork, no physical keyboard) --
+    -- overlay visibility and screen-opening are handled by the on-screen
+    -- toggle/backpack/party buttons instead. See onScreenKey for the one
+    -- remaining key check (escape / Android back button, while a screen is open).
+    if not C.wrappedMouse and love then
+      C.origMousepressed = love.mousepressed
+      love.mousepressed = function(x, y, button, ...)
+        local c = _G.__KANTO_INGAME
+        if c and c.screen and c.onScreenMouse then pcall(c.onScreenMouse, x, y, button); return end
+        -- Store swipe start position for carousel navigation
+        if c and button == 1 then
+          local s2 = love.graphics.getHeight() / REF_H
+          c.swipeStartX = x / s2
+          c.swipeStartY = y / s2
+          c.swipeStartTime = love.timer.getTime()
+        end
+        -- toggle button click (when no screen is open)
+        if c and c.toggleBtn and button == 1 then
+          local s2 = love.graphics.getHeight() / REF_H
+          local dx, dy = x/s2, y/s2
+          local b = c.toggleBtn
+          if dx >= b.x and dx <= b.x+b.w and dy >= b.y and dy <= b.y+b.h then
+            c.visible = not c.visible
+            return
           end
-          return
         end
-      end
-      -- party button click (open active Pokemon <-> PC boxes menu)
-      if c and c.partyBtn and button == 1 then
-        local s2 = love.graphics.getHeight() / REF_H
-        local dx, dy = x/s2, y/s2
-        local b = c.partyBtn
-        if dx >= b.x and dx <= b.x+b.w and dy >= b.y and dy <= b.y+b.h then
-          if c.screen == "party" then
-            if c.closeScreen then c.closeScreen() end
-          elseif c.openScreen then
-            c.openScreen("party")
+        -- backpack button click (open backpack/PC menu)
+        if c and c.backpackBtn and button == 1 then
+          local s2 = love.graphics.getHeight() / REF_H
+          local dx, dy = x/s2, y/s2
+          local b = c.backpackBtn
+          if dx >= b.x and dx <= b.x+b.w and dy >= b.y and dy <= b.y+b.h then
+            if c.screen == "items" then
+              if c.closeScreen then c.closeScreen() end
+            elseif c.openScreen then
+              c.openScreen("items")
+            end
+            return
           end
-          return
         end
+        -- party button click (open active Pokemon <-> PC boxes menu)
+        if c and c.partyBtn and button == 1 then
+          local s2 = love.graphics.getHeight() / REF_H
+          local dx, dy = x/s2, y/s2
+          local b = c.partyBtn
+          if dx >= b.x and dx <= b.x+b.w and dy >= b.y and dy <= b.y+b.h then
+            if c.screen == "party" then
+              if c.closeScreen then c.closeScreen() end
+            elseif c.openScreen then
+              c.openScreen("party")
+            end
+            return
+          end
+        end
+        if C.origMousepressed then return C.origMousepressed(x, y, button, ...) end
       end
-      if C.origMousepressed then return C.origMousepressed(x, y, button, ...) end
-    end
-    C.origMousereleased = love.mousereleased
-    love.mousereleased = function(x, y, button, ...)
-      local c = _G.__KANTO_INGAME
-      if c and c.screen then if c.onScreenRelease then pcall(c.onScreenRelease, x, y, button) end; return end
-      -- Handle swipe gesture for carousel navigation
-      if c and button == 1 and c.swipeStartX then
-        local s2 = love.graphics.getHeight() / REF_H
-        local endX = x / s2
-        local deltaX = endX - c.swipeStartX
-        local deltaTime = love.timer.getTime() - (c.swipeStartTime or 0)
-        -- Swipe threshold: 40+ pixels or fast flick (< 0.3 seconds)
-        local minSwipeDist = 40
-        if math.abs(deltaX) >= minSwipeDist and deltaTime < 0.5 then
-          if c.rightPage and c.rightDots then
-            if deltaX > 0 then
-              -- Swipe right: go to previous page
-              c.rightPage = math.max(1, c.rightPage - 1)
-            else
-              -- Swipe left: go to next page
-              c.rightPage = math.min(c.rightDots.count, c.rightPage + 1)
+      C.origMousereleased = love.mousereleased
+      love.mousereleased = function(x, y, button, ...)
+        local c = _G.__KANTO_INGAME
+        if c and c.screen then if c.onScreenRelease then pcall(c.onScreenRelease, x, y, button) end; return end
+        -- Handle swipe gesture for carousel navigation
+        if c and button == 1 and c.swipeStartX then
+          local s2 = love.graphics.getHeight() / REF_H
+          local endX = x / s2
+          local deltaX = endX - c.swipeStartX
+          local deltaTime = love.timer.getTime() - (c.swipeStartTime or 0)
+          -- Swipe threshold: 40+ pixels or fast flick (< 0.3 seconds)
+          local minSwipeDist = 40
+          if math.abs(deltaX) >= minSwipeDist and deltaTime < 0.5 then
+            if c.rightPage and c.rightDots then
+              if deltaX > 0 then
+                -- Swipe right: go to previous page
+                c.rightPage = math.max(1, c.rightPage - 1)
+              else
+                -- Swipe left: go to next page
+                c.rightPage = math.min(c.rightDots.count, c.rightPage + 1)
+              end
             end
           end
+          c.swipeStartX = nil
+          c.swipeStartY = nil
+          c.swipeStartTime = nil
         end
-        c.swipeStartX = nil
-        c.swipeStartY = nil
-        c.swipeStartTime = nil
+        if C.origMousereleased then return C.origMousereleased(x, y, button, ...) end
       end
-      if C.origMousereleased then return C.origMousereleased(x, y, button, ...) end
+      C.wrappedMouse = true
     end
-    C.wrappedMouse = true
-  end
+  end)
 
-  mod.log:info("kanto_companion: overlay=o  items=i  party=p")
+  mod.log:info("kanto_companion: loaded (touch controls: toggle/backpack/party buttons)")
 end
