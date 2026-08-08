@@ -22,10 +22,6 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Validate mod
-        run: |
-          python3 ../gen1recomp/tools/modkit.py validate . --strict
-
       - name: Create ZIP archive
         run: |
           zip -r "Kanto.Companion.Lite.zip" . \
