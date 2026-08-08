@@ -1,0 +1,754 @@
+--- PCPopup: full-screen modal PC window -- Items (Bag <-> PC) and Boxes
+-- (Party <-> PC boxes) as two tabs in one popup, matching Kanto
+-- Companion's "I" and "P" screens. Touch-only: there's no mouse drag on
+-- Android, so the interaction model is tap-to-pick-up / tap-to-place
+-- instead of Kanto's click-and-drag -- same underlying moves and rules
+-- (capacity, stack caps, "keep a healthy Pokemon in the party"), just
+-- triggered by two taps instead of a drag gesture.
+--
+-- All game-state reads/writes go through PCService; this component only
+-- ever touches the props it receives, its own view state (which tab, what
+-- it's currently holding, which box is open), and the hit-test list it
+-- rebuilds every draw() call -- no game.save access here.
+local Component = require("core.Component")
+local Colors    = require("util.Colors")
+local Helpers   = require("util.Helpers")
+local Viewport  = require("util.Viewport")
+
+local PCPopup = setmetatable({}, { __index = Component })
+PCPopup.__index = PCPopup
+PCPopup.needs = { "ConfigService", "FontService", "GameService", "PCService", "SpriteService", "EventBus" }
+
+function PCPopup.new(locator, props)
+    local self = setmetatable(Component.new(locator, props), PCPopup)
+    self.tab      = "items"   -- "items" | "boxes"
+    self.heldItem = nil       -- { from="bag"/"pc", id, qty, name }
+    self.heldMon  = nil       -- { mon, name, src={loc,box,index} }
+    self.boxView  = 1
+    self.status   = nil
+    self.statusAt = 0
+    self._hit     = {}
+    -- ADDED: Scroll state for item panels (bag and pc side-by-side)
+    self.scrollOffset = { bag = 0, pc = 0 }
+    self.scrollDragging = false
+    self.scrollDragSide = nil
+    self.scrollDragStartY = 0
+    self.scrollDragStartOffset = 0
+    return self
+end
+
+function PCPopup:init()
+    self.bus = self._locator:resolve("EventBus")
+
+    self:_listen("pc.open", function(self2) self2:openPopup() end)
+    self:_listen("battle.started", function(self2) self2:closePopup() end)
+    self:_listen("hud.visibility.changed", function(self2, visible)
+        if not visible then self2:closePopup() end
+    end)
+
+    self:_listen("input.pressed", function(self2, x, y, consume)
+        if not self2:isActive() then return end
+        -- The popup owns all input while it's open, same as Kanto
+        -- Companion's pushed modal screen capturing every click.
+        if consume then consume() end
+        self2:_handleClick(x, y)
+    end)
+    
+    -- BUGFIX: Listen for mouse release to stop scrollbar drag
+    self:_listen("input.released", function(self2, x, y, consume)
+        if not self2:isActive() then return end
+        if self2.scrollDragging then
+            self2.scrollDragging = false
+            if consume then consume() end
+        end
+    end)
+end
+
+function PCPopup:update(dt)
+    if not self:isActive() then return end
+    local game = self:_service("GameService")
+    if not game:isInGame() then self:closePopup() end
+    
+    -- ADDED: Handle scrollbar drag
+    if self.scrollDragging and self.scrollDragSide then
+        local currentY = love.mouse.getY()
+        local dy = currentY - self.scrollDragStartY
+        local side = self.scrollDragSide
+        self.scrollOffset[side] = math.max(0, self.scrollDragStartOffset + dy)
+    end
+end
+
+-- ======================================================================
+-- Open / close
+-- ======================================================================
+
+function PCPopup:openPopup()
+    if self:isActive() then return end
+    local pc = self:_service("PCService")
+    if not pc:canOpen() then return end
+
+    self.tab = "items"
+    self.heldItem, self.heldMon = nil, nil
+    self.status = nil
+    self.boxView = pc:getCurrentBox()
+
+    pc:openModal()
+    self:setActive(true)
+    self.bus:publish("modal.opened")
+end
+
+function PCPopup:closePopup()
+    if not self:isActive() then return end
+    local pc = self:_service("PCService")
+    pc:closeModal()
+    self.heldItem, self.heldMon = nil, nil
+    self._hit = {}
+    -- ADDED: Reset scroll state
+    self.scrollOffset = { bag = 0, pc = 0 }
+    self.scrollDragging = false
+    self:setActive(false)
+    self.bus:publish("modal.closed")
+end
+
+-- ======================================================================
+-- Input
+-- ======================================================================
+
+-- `viewport` is optional: pass the same Viewport used to clip drawing
+-- (e.g. a scrolled list) so a region scrolled outside it can never be
+-- hit-tested as tappable, even though its raw x/y/w/h says it overlaps
+-- (x, y). Regions that are always fully on-screen (buttons, tabs, full
+-- panel backgrounds) can omit it.
+function PCPopup:_hitRegion(x, y, w, h, tag, data, viewport)
+    self._hit[#self._hit + 1] = { x = x, y = y, w = w, h = h, tag = tag, data = data, viewport = viewport }
+end
+
+-- Last-registered (topmost drawn) region wins, same as Kanto's topHit.
+function PCPopup:_topHit(x, y)
+    for i = #self._hit, 1, -1 do
+        local r = self._hit[i]
+        if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h
+           and (not r.viewport or r.viewport:contains(x, y)) then
+            return r.tag, r.data
+        end
+    end
+    return nil, nil
+end
+
+function PCPopup:_setStatus(msg)
+    self.status = msg
+    self.statusAt = (love.timer and love.timer.getTime and love.timer.getTime()) or 0
+end
+
+function PCPopup:_handleClick(x, y)
+    -- Check for scrollbar drag FIRST (before hit test)
+    if self.tab == "items" then
+        local L = self:_computeLayout(love.graphics.getDimensions())
+        local bx, by, bw, bh = L.wx + 10, L.bodyY, L.ww - 20, L.bodyH
+        local p1, p2 = self:_splitPanels(bx, by, bw, bh, L.portrait)
+        
+        -- Check bag scrollbar (left panel)
+        if x >= p1.x + p1.w - 16 and x <= p1.x + p1.w and
+           y >= p1.y + 28 and y <= p1.y + p1.h then
+            self.scrollDragging = true
+            self.scrollDragSide = "bag"
+            self.scrollDragStartY = y
+            self.scrollDragStartOffset = self.scrollOffset.bag or 0
+            return
+        end
+        
+        -- Check PC scrollbar (right panel)
+        if x >= p2.x + p2.w - 16 and x <= p2.x + p2.w and
+           y >= p2.y + 28 and y <= p2.y + p2.h then
+            self.scrollDragging = true
+            self.scrollDragSide = "pc"
+            self.scrollDragStartY = y
+            self.scrollDragStartOffset = self.scrollOffset.pc or 0
+            return
+        end
+    end
+    
+    local tag, data = self:_topHit(x, y)
+    if tag == "close" then
+        self:closePopup()
+        return
+    end
+    if tag == "tab" then
+        self.tab = data
+        self.heldItem, self.heldMon = nil, nil
+        return
+    end
+    if self.tab == "items" then
+        self:_handleItemsClick(tag, data)
+    else
+        self:_handleBoxesClick(tag, data)
+    end
+end
+
+function PCPopup:_handleItemsClick(tag, data)
+    if tag ~= "itemrow" and tag ~= "panel" then return end
+    local pc = self:_service("PCService")
+
+    if tag == "itemrow" then
+        if self.heldItem and self.heldItem.from == data.side and self.heldItem.id == data.id then
+            self.heldItem = nil   -- tap the held item again -> cancel
+            return
+        end
+        if self.heldItem and self.heldItem.from ~= data.side then
+            local ok, err = pc:transferItem(self.heldItem.from, self.heldItem.id, data.side)
+            self:_setStatus(ok and nil or err)
+            self.heldItem = nil
+            return
+        end
+        -- Pick up (or switch to) an item on this side.
+        local qty = (data.side == "bag") and (pc:getBagItems()[data.id] or 0) or pc:getItemCount(data.id)
+        if qty > 0 then
+            local dItem = self:_service("GameService"):getItemData()
+            local name = (dItem[data.id] and dItem[data.id].name) or data.id
+            self.heldItem = { from = data.side, id = data.id, qty = qty, name = name }
+        end
+        return
+    end
+
+    -- tag == "panel": tapped empty space in a list -> drop here if we're
+    -- holding something from the other side, otherwise just release.
+    if self.heldItem and self.heldItem.from ~= data.side then
+        local ok, err = pc:transferItem(self.heldItem.from, self.heldItem.id, data.side)
+        self:_setStatus(ok and nil or err)
+    end
+    self.heldItem = nil
+end
+
+function PCPopup:_handleBoxesClick(tag, data)
+    local pc = self:_service("PCService")
+
+    if tag == "monslot" then
+        if self.heldMon then
+            local src = self.heldMon.src
+            if src.loc == data.loc and src.box == data.box and src.index == data.index then
+                self.heldMon = nil   -- tap the held slot again -> cancel
+                return
+            end
+            local tgt = { loc = data.loc, box = data.box, index = data.index }
+            local ok, err = pc:moveMon(src, tgt)
+            self:_setStatus(ok and nil or err)
+            self.heldMon = nil
+            return
+        end
+        if data.mon then
+            local dPoke = self:_service("GameService"):getPokemonData()
+            local def = dPoke[data.mon.species]
+            local name = Helpers.sanitizeName(data.mon.nickname or (def and def.name) or data.mon.species)
+            self.heldMon = { mon = data.mon, name = name, src = { loc = data.loc, box = data.box, index = data.index } }
+        end
+        return
+    end
+
+    if tag == "boxtab" then
+        if self.heldMon then
+            local ok, err = pc:moveMon(self.heldMon.src, { loc = "box", box = data.box })
+            self:_setStatus(ok and nil or err)
+            self.heldMon = nil
+        end
+        self.boxView = data.box
+        return
+    end
+
+    if tag == "boxnav" then
+        local n = pc:getBoxCount()
+        if data.dir > 0 then
+            self.boxView = (self.boxView < n) and (self.boxView + 1) or 1
+        else
+            self.boxView = (self.boxView > 1) and (self.boxView - 1) or n
+        end
+        return
+    end
+end
+
+-- ======================================================================
+-- Layout helpers
+-- ======================================================================
+
+function PCPopup:_computeLayout(W, H)
+    local M = 16
+    local headerH, footerH = 46, 24
+    local ww, wh = W - 2 * M, H - 2 * M
+    return {
+        wx = M, wy = M, ww = ww, wh = wh,
+        headerH = headerH, footerH = footerH,
+        bodyY = M + headerH,
+        bodyH = wh - headerH - footerH,
+        portrait = W < H,
+    }
+end
+
+function PCPopup:_splitPanels(x, y, w, h, portrait)
+    local gap = 10
+    if portrait then
+        local ph = (h - gap) / 2
+        return { x = x, y = y, w = w, h = ph }, { x = x, y = y + ph + gap, w = w, h = ph }
+    else
+        local pw = (w - gap) / 2
+        return { x = x, y = y, w = pw, h = h }, { x = x + pw + gap, y = y, w = pw, h = h }
+    end
+end
+
+-- ======================================================================
+-- Draw
+-- ======================================================================
+
+function PCPopup:draw(ctx)
+    if not self:isActive() then return end
+    local cfg   = self:_service("ConfigService")
+    local fonts = self:_service("FontService")
+    local W, H  = love.graphics.getDimensions()
+    self._hit = {}
+
+    Colors.set({0, 0, 0}, 0.72)
+    love.graphics.rectangle("fill", 0, 0, W, H)
+
+    local L = self:_computeLayout(W, H)
+
+    Colors.set(cfg.COL.panel, 0.98)
+    love.graphics.rectangle("fill", math.floor(L.wx), math.floor(L.wy), math.floor(L.ww), math.floor(L.wh))
+    love.graphics.setLineWidth(1)
+    Colors.set(cfg.COL.border, 0.5)
+    love.graphics.rectangle("line", math.floor(L.wx) + 0.5, math.floor(L.wy) + 0.5, math.floor(L.ww) - 1, math.floor(L.wh) - 1)
+
+    self:_drawHeader(L, cfg, fonts)
+    if self.tab == "items" then
+        self:_drawItemsTab(L, cfg, fonts)
+    else
+        self:_drawBoxesTab(L, cfg, fonts)
+    end
+    self:_drawFooter(L, cfg, fonts)
+end
+
+function PCPopup:_drawHeader(L, cfg, fonts)
+    local f20 = fonts:getFont(20)
+    love.graphics.setFont(f20)
+    Colors.set(cfg.COL.gold, 1)
+    love.graphics.print("PC", math.floor(L.wx + 14), math.floor(L.wy + 10))
+
+    local tabW, tabH = 84, 26
+    local tx = L.wx + 60
+    local ty = L.wy + 12
+    local tabs = { { "items", "Items" }, { "boxes", "Boxes" } }
+    for _, t in ipairs(tabs) do
+        local active = self.tab == t[1]
+        self:_hitRegion(tx, ty, tabW, tabH, "tab", t[1])
+        Colors.set(active and cfg.COL.tabActive or cfg.COL.tabBg, active and 0.9 or 0.85)
+        love.graphics.rectangle("fill", math.floor(tx), math.floor(ty), tabW, tabH)
+        local f13 = fonts:getFont(13)
+        love.graphics.setFont(f13)
+        Colors.set(active and cfg.COL.panel or cfg.COL.dim, 1)
+        local tw = f13:getWidth(t[2])
+        love.graphics.print(t[2], math.floor(tx + tabW / 2 - tw / 2), math.floor(ty + 6))
+        tx = tx + tabW + 6
+    end
+
+    local cw = 32
+    local cx = L.wx + L.ww - cw - 10
+    local cy = L.wy + 8
+    self:_hitRegion(cx, cy, cw, cw, "close", nil)
+    Colors.set(cfg.COL.lo, 0.85)
+    love.graphics.rectangle("fill", math.floor(cx), math.floor(cy), cw, cw)
+    Colors.set(cfg.COL.border, 0.5)
+    love.graphics.rectangle("line", math.floor(cx) + 0.5, math.floor(cy) + 0.5, cw - 1, cw - 1)
+    local f16 = fonts:getFont(16)
+    love.graphics.setFont(f16)
+    Colors.set(cfg.COL.text, 1)
+    local xw = f16:getWidth("X")
+    love.graphics.print("X", math.floor(cx + cw / 2 - xw / 2), math.floor(cy + 6))
+
+    Colors.set(cfg.COL.border, 0.35)
+    love.graphics.setLineWidth(1)
+    love.graphics.line(L.wx, L.wy + L.headerH, L.wx + L.ww, L.wy + L.headerH)
+end
+
+function PCPopup:_drawFooter(L, cfg, fonts)
+    if self.status and love.timer and love.timer.getTime and (love.timer.getTime() - self.statusAt) > 3 then
+        self.status = nil
+    end
+
+    local f12 = fonts:getFont(12)
+    love.graphics.setFont(f12)
+    local msg
+    if self.status then
+        Colors.set(cfg.COL.lo, 1)
+        msg = self.status
+    elseif self.heldItem then
+        Colors.set(cfg.COL.gold, 1)
+        msg = "Holding " .. self.heldItem.name .. " x" .. tostring(self.heldItem.qty)
+            .. " -- tap the other list to move it, tap it again to cancel"
+    elseif self.heldMon then
+        Colors.set(cfg.COL.gold, 1)
+        msg = "Holding " .. self.heldMon.name .. " -- tap a slot or box to place it, tap it again to cancel"
+    elseif self.tab == "items" then
+        Colors.set(cfg.COL.dim, 1)
+        msg = "Tap an item, then tap the other list to move it"
+    else
+        Colors.set(cfg.COL.dim, 1)
+        msg = "Tap a Pokemon, then tap a slot or box to move it"
+    end
+    love.graphics.print(msg, math.floor(L.wx + 14), math.floor(L.wy + L.wh - L.footerH + 4))
+end
+
+-- ---- Items tab ---------------------------------------------------
+
+function PCPopup:_drawItemsTab(L, cfg, fonts)
+    local pc = self:_service("PCService")
+    local game = self:_service("GameService")
+    local dItem = game:getItemData()
+
+    local bx, by, bw, bh = L.wx + 10, L.bodyY, L.ww - 20, L.bodyH
+    local p1, p2 = self:_splitPanels(bx, by, bw, bh, L.portrait)
+
+    self:_drawItemList(p1, cfg, fonts, dItem, "bag", "BAG", pc:getBagItems(), pc:bagSlotCount(), pc:bagCapacity())
+    self:_drawItemList(p2, cfg, fonts, dItem, "pc", "PC ITEMS", pc:getItems(), pc:pcSlotCount(), pc:pcItemCapacity())
+end
+
+-- Splits {itemId=count} into Balls / Healing / Other, sorted by name --
+-- same 3-bucket scheme ItemsPanel uses, for a consistent look mod-wide.
+function PCPopup:_categorizeItems(dItem, itemsTable)
+    local balls, heals, other = {}, {}, {}
+    for id, count in pairs(itemsTable) do
+        if type(count) == "number" and count > 0 then
+            local name = (dItem[id] and dItem[id].name) or id
+            local row = { id = id, name = name, qty = count }
+            if Helpers.isBallItem(id) then
+                balls[#balls + 1] = row
+            elseif Helpers.isHealItem(id) then
+                heals[#heals + 1] = row
+            else
+                other[#other + 1] = row
+            end
+        end
+    end
+    local function byName(a, b) return a.name < b.name end
+    table.sort(balls, byName)
+    table.sort(heals, byName)
+    table.sort(other, byName)
+    return balls, heals, other
+end
+
+function PCPopup:_drawItemList(p, cfg, fonts, dItem, side, title, itemsTable, slotCount, capacity)
+    Colors.set(cfg.COL.panelTop, 0.9)
+    love.graphics.rectangle("fill", math.floor(p.x), math.floor(p.y), math.floor(p.w), math.floor(p.h))
+    Colors.set(cfg.COL.border, 0.3)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", math.floor(p.x) + 0.5, math.floor(p.y) + 0.5, math.floor(p.w) - 1, math.floor(p.h) - 1)
+
+    self:_hitRegion(p.x, p.y, p.w, p.h, "panel", { side = side })
+
+    local f14 = fonts:getFont(14)
+    love.graphics.setFont(f14)
+    Colors.set(cfg.COL.text, 1)
+    love.graphics.print(title, math.floor(p.x + 8), math.floor(p.y + 6))
+
+    local capStr = slotCount .. "/" .. capacity
+    local f11 = fonts:getFont(11)
+    love.graphics.setFont(f11)
+    Colors.set(slotCount >= capacity and cfg.COL.lo or cfg.COL.dim, 1)
+    love.graphics.print(capStr, math.floor(p.x + p.w - 8 - f11:getWidth(capStr)), math.floor(p.y + 9))
+
+    local balls, heals, other = self:_categorizeItems(dItem, itemsTable)
+    if #balls == 0 and #heals == 0 and #other == 0 then
+        local f12 = fonts:getFont(12)
+        love.graphics.setFont(f12)
+        Colors.set(cfg.COL.dim, 1)
+        love.graphics.print((side == "bag") and "Bag is empty" or "PC is empty", math.floor(p.x + 8), math.floor(p.y + 30))
+        return
+    end
+
+    -- ADDED: Calculate content height for scrollbar
+    local rowH = 22
+    local headerH = 15  -- Section header height
+    local contentHeight = 0
+    local sections = { { title = "BALLS", rows = balls }, { title = "HEALING", rows = heals }, { title = "OTHER", rows = other } }
+    for _, sec in ipairs(sections) do
+        if #sec.rows > 0 then
+            contentHeight = contentHeight + headerH + (#sec.rows * rowH) + 4  -- 4 = spacing
+        end
+    end
+    
+    local viewportHeight = p.h - 32  -- Available space for scrolling (bottom margin)
+    local maxScroll = math.max(0, contentHeight - viewportHeight)
+    self.scrollOffset[side] = math.max(0, math.min(maxScroll, self.scrollOffset[side] or 0))
+    local scroll = self.scrollOffset[side]
+
+    local cy = p.y + 30 - scroll  -- MODIFIED: Apply scroll offset
+    local maxCy = p.y + p.h - 4
+    -- Single source of truth for "what's actually visible": the same
+    -- rect clips drawing (below) and gates itemrow hit-tests (in
+    -- drawSec), so a row scrolled above this viewport can no longer be
+    -- tapped just because its unclipped y/h still overlaps a tap.
+    local viewport = Viewport.new(p.x, p.y + 28, p.w, p.h - 32)
+    viewport:clipDraw()
+
+    local function drawSec(secTitle, rows)
+        if #rows == 0 then return end
+        if cy + 16 > maxCy then return end
+        local f10 = fonts:getFont(10)
+        love.graphics.setFont(f10)
+        Colors.set(cfg.COL.dim, 1)
+        love.graphics.print(secTitle, math.floor(p.x + 8), math.floor(cy))
+        cy = cy + 15
+        for _, row in ipairs(rows) do
+            if cy + rowH > maxCy then break end
+            local held = self.heldItem and self.heldItem.from == side and self.heldItem.id == row.id
+            self:_hitRegion(p.x + 4, cy, p.w - 8, rowH - 2, "itemrow", { side = side, id = row.id }, viewport)
+            if held then
+                Colors.set(cfg.COL.gold, 0.22)
+                love.graphics.rectangle("fill", math.floor(p.x + 4), math.floor(cy), math.floor(p.w - 8), rowH - 2)
+            end
+            local f12b = fonts:getFont(12)
+            love.graphics.setFont(f12b)
+            Colors.set(held and cfg.COL.dim or cfg.COL.text, 1)
+            love.graphics.print(row.name, math.floor(p.x + 10), math.floor(cy + 3))
+            local qtyStr = "x" .. tostring(row.qty)
+            Colors.set(cfg.COL.dim, 1)
+            love.graphics.print(qtyStr, math.floor(p.x + p.w - 10 - f12b:getWidth(qtyStr)), math.floor(cy + 3))
+            cy = cy + rowH
+        end
+        cy = cy + 4
+    end
+
+    drawSec("BALLS", balls)
+    drawSec("HEALING", heals)
+    drawSec("OTHER", other)
+
+    love.graphics.setScissor()
+
+    -- ADDED: Draw scrollbar if content exceeds viewport
+    if maxScroll > 0 then
+        local scrollbarX = p.x + p.w - 10  -- Position in the ±8px hit zone
+        local scrollbarW = 4
+        local scrollbarY = p.y + 28
+        local scrollbarH = viewportHeight
+        
+        -- Scrollbar track
+        Colors.set(cfg.COL.border, 0.1)
+        love.graphics.rectangle("fill", math.floor(scrollbarX), math.floor(scrollbarY), scrollbarW, math.floor(scrollbarH))
+        
+        -- Thumb height proportional to content
+        local thumbHeight = math.max(20, scrollbarH * (viewportHeight / contentHeight))
+        
+        -- Thumb position
+        local thumbY = scrollbarY + (scroll / maxScroll) * (scrollbarH - thumbHeight)
+        
+        -- Thumb appearance (highlight if dragging this side)
+        local isDragging = self.scrollDragging and self.scrollDragSide == side
+        Colors.set(isDragging and cfg.COL.gold or cfg.COL.hi, isDragging and 0.9 or 0.7)
+        love.graphics.rectangle("fill", math.floor(scrollbarX), math.floor(thumbY), scrollbarW, math.floor(thumbHeight))
+    end
+end
+
+-- ---- Boxes tab ----------------------------------------------------
+
+function PCPopup:_drawBoxesTab(L, cfg, fonts)
+    local pc = self:_service("PCService")
+    local game = self:_service("GameService")
+    local sprites = self:_service("SpriteService")
+    local dPoke = game:getPokemonData()
+
+    local bx, by, bw, bh = L.wx + 10, L.bodyY, L.ww - 20, L.bodyH
+    local p1, p2 = self:_splitPanels(bx, by, bw, bh, L.portrait)
+
+    self:_drawPartyPanel(p1, cfg, fonts, sprites, dPoke, pc)
+    self:_drawBoxPanel(p2, cfg, fonts, sprites, dPoke, pc)
+end
+
+function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
+    Colors.set(cfg.COL.panelTop, 0.9)
+    love.graphics.rectangle("fill", math.floor(p.x), math.floor(p.y), math.floor(p.w), math.floor(p.h))
+    Colors.set(cfg.COL.border, 0.3)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", math.floor(p.x) + 0.5, math.floor(p.y) + 0.5, math.floor(p.w) - 1, math.floor(p.h) - 1)
+
+    local party = pc:getParty()
+
+    local f14 = fonts:getFont(14)
+    love.graphics.setFont(f14)
+    Colors.set(cfg.COL.text, 1)
+    love.graphics.print("PARTY", math.floor(p.x + 8), math.floor(p.y + 6))
+    local countStr = #party .. "/" .. pc:getPartyMax()
+    local f11 = fonts:getFont(11)
+    love.graphics.setFont(f11)
+    Colors.set(cfg.COL.dim, 1)
+    love.graphics.print(countStr, math.floor(p.x + p.w - 8 - f11:getWidth(countStr)), math.floor(p.y + 9))
+
+    local ry = p.y + 28
+    local rh = math.min(58, (p.h - 32) / 6)
+    for i = 1, 6 do
+        local y = ry + (i - 1) * rh
+        local mon = party[i]
+        self:_hitRegion(p.x + 4, y, p.w - 8, rh - 4, "monslot", { loc = "party", box = nil, index = i, mon = mon })
+        local held = self.heldMon and self.heldMon.src.loc == "party" and self.heldMon.src.index == i
+        if held then
+            Colors.set(cfg.COL.gold, 0.18)
+        elseif mon then
+            Colors.set(cfg.COL.border, 0.10)
+        else
+            Colors.set(cfg.COL.border, 0.04)
+        end
+        love.graphics.rectangle("fill", math.floor(p.x + 4), math.floor(y), math.floor(p.w - 8), rh - 4)
+
+        if mon then
+            local img = sprites:getSprite(mon.species, dPoke)
+            local ss = math.min(rh - 8, 40)
+            if img then
+                local iw, ih = img:getDimensions()
+                local sc = ss / math.max(iw, ih)
+                Colors.set(cfg.COL.text, 1)
+                love.graphics.draw(img, math.floor(p.x + 8), math.floor(y + (rh - 4 - ss) / 2), 0, sc, sc)
+            end
+            local nx = p.x + 8 + ss + 8
+            local def = dPoke[mon.species]
+            local name = Helpers.sanitizeName(mon.nickname or (def and def.name) or mon.species)
+            local f12 = fonts:getFont(12)
+            love.graphics.setFont(f12)
+            Colors.set(held and cfg.COL.dim or cfg.COL.text, 1)
+            love.graphics.print(name, math.floor(nx), math.floor(y + 4))
+
+            local mx = (mon.stats and mon.stats.hp) or mon.hp or 1
+            local hp = mon.hp or mx
+            local frac = mx > 0 and hp / mx or 0
+            local f10 = fonts:getFont(10)
+            love.graphics.setFont(f10)
+            Colors.set(cfg.COL.dim, 1)
+            love.graphics.print("Lv" .. (mon.level or 1) .. "  " .. hp .. "/" .. mx, math.floor(nx), math.floor(y + rh - 4 - 16))
+
+            local barW = p.w - (nx - p.x) - 12
+            local barY = y + rh - 4 - 8
+            Colors.set({ 0.12, 0.12, 0.14 }, 1)
+            love.graphics.rectangle("fill", math.floor(nx), math.floor(barY), math.floor(barW), 4)
+            if frac > 0 then
+                Colors.set(Colors.hpColor(frac), 1)
+                love.graphics.rectangle("fill", math.floor(nx), math.floor(barY), math.floor(barW * frac), 4)
+            end
+        else
+            local f11b = fonts:getFont(11)
+            love.graphics.setFont(f11b)
+            Colors.set(cfg.COL.dim, 1)
+            love.graphics.print("- empty -", math.floor(p.x + 10), math.floor(y + rh / 2 - 14))
+        end
+    end
+end
+
+function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc)
+    Colors.set(cfg.COL.panelTop, 0.9)
+    love.graphics.rectangle("fill", math.floor(p.x), math.floor(p.y), math.floor(p.w), math.floor(p.h))
+    Colors.set(cfg.COL.border, 0.3)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", math.floor(p.x) + 0.5, math.floor(p.y) + 0.5, math.floor(p.w) - 1, math.floor(p.h) - 1)
+
+    local n = pc:getBoxCount()
+    local cap = pc:getBoxCapacity()
+    if self.boxView < 1 or self.boxView > n then self.boxView = 1 end
+    local cur = self.boxView
+    local box = pc:getBoxPokemon(cur)
+
+    local f14 = fonts:getFont(14)
+    love.graphics.setFont(f14)
+    Colors.set(cfg.COL.text, 1)
+    love.graphics.print("BOXES", math.floor(p.x + 8), math.floor(p.y + 6))
+
+    -- nav: [<]  Box N  cnt/cap  [>]
+    local navY = p.y + 6
+    local navW = 22
+    local label = "Box " .. cur .. "  " .. #box .. "/" .. cap
+    local f11 = fonts:getFont(11)
+    love.graphics.setFont(f11)
+    local labelW = f11:getWidth(label)
+    local prevX = p.x + p.w - 8 - navW * 2 - labelW - 12
+
+    self:_hitRegion(prevX, navY, navW, 18, "boxnav", { dir = -1 })
+    Colors.set(cfg.COL.tabBg, 0.85)
+    love.graphics.rectangle("fill", math.floor(prevX), math.floor(navY), navW, 18)
+    local f12 = fonts:getFont(12)
+    love.graphics.setFont(f12)
+    Colors.set(cfg.COL.text, 1)
+    love.graphics.print("<", math.floor(prevX + 8), math.floor(navY + 2))
+
+    love.graphics.setFont(f11)
+    Colors.set(#box >= cap and cfg.COL.lo or cfg.COL.dim, 1)
+    love.graphics.print(label, math.floor(prevX + navW + 6), math.floor(navY + 3))
+
+    local nextX = prevX + navW + 6 + labelW + 6
+    self:_hitRegion(nextX, navY, navW, 18, "boxnav", { dir = 1 })
+    Colors.set(cfg.COL.tabBg, 0.85)
+    love.graphics.rectangle("fill", math.floor(nextX), math.floor(navY), navW, 18)
+    love.graphics.setFont(f12)
+    Colors.set(cfg.COL.text, 1)
+    love.graphics.print(">", math.floor(nextX + 8), math.floor(navY + 2))
+
+    -- rail of all boxes -- skipped when there isn't enough width per tab
+    -- to tap reliably; the nav arrows above always work regardless.
+    local railY = p.y + 30
+    local railH = 22
+    local railGap = 2
+    local tabW = (p.w - 16 - (n - 1) * railGap) / n
+    local gridTop = railY
+    if tabW >= 18 then
+        for i = 1, n do
+            local tx = p.x + 8 + (i - 1) * (tabW + railGap)
+            local cnt = #pc:getBoxPokemon(i)
+            local sel = i == cur
+            self:_hitRegion(tx, railY, tabW, railH, "boxtab", { box = i })
+            Colors.set(sel and cfg.COL.gold or cfg.COL.tabBg, sel and 0.9 or (cnt == 0 and 0.35 or 0.75))
+            love.graphics.rectangle("fill", math.floor(tx), math.floor(railY), math.floor(tabW), railH)
+            local f10 = fonts:getFont(10)
+            love.graphics.setFont(f10)
+            Colors.set(sel and cfg.COL.panel or cfg.COL.dim, 1)
+            local numStr = tostring(i)
+            love.graphics.print(numStr, math.floor(tx + tabW / 2 - f10:getWidth(numStr) / 2), math.floor(railY + 5))
+        end
+        gridTop = railY + railH + 8
+    end
+
+    local cols, rows2, gapG = 4, 5, 6
+    local gy0 = gridTop
+    local cellW = (p.w - 16 - (cols - 1) * gapG) / cols
+    local cellH = math.min((p.y + p.h - gy0 - 8 - (rows2 - 1) * gapG) / rows2, cellW * 1.05)
+    for i = 1, cols * rows2 do
+        local col = (i - 1) % cols
+        local row = math.floor((i - 1) / cols)
+        local tx = p.x + 8 + col * (cellW + gapG)
+        local ty = gy0 + row * (cellH + gapG)
+        local mon = box[i]
+        self:_hitRegion(tx, ty, cellW, cellH, "monslot", { loc = "box", box = cur, index = i, mon = mon })
+        local held = self.heldMon and self.heldMon.src.loc == "box" and self.heldMon.src.box == cur and self.heldMon.src.index == i
+        if held then
+            Colors.set(cfg.COL.gold, 0.18)
+        elseif mon then
+            Colors.set(cfg.COL.border, 0.08)
+        else
+            Colors.set(cfg.COL.border, 0.03)
+        end
+        love.graphics.rectangle("fill", math.floor(tx), math.floor(ty), math.floor(cellW), math.floor(cellH))
+
+        if mon then
+            local img = sprites:getSprite(mon.species, dPoke)
+            if img then
+                local iw, ih = img:getDimensions()
+                local sc = math.min((cellW - 8) / iw, (cellH - 24) / ih)
+                Colors.set(cfg.COL.text, 1)
+                love.graphics.draw(img, math.floor(tx + cellW / 2), math.floor(ty + (cellH - 20) / 2), 0, sc, sc, iw / 2, ih / 2)
+            end
+            local def = dPoke[mon.species]
+            local nm = Helpers.sanitizeName(mon.nickname or (def and def.name) or mon.species)
+            local f9 = fonts:getFont(9)
+            love.graphics.setFont(f9)
+            Colors.set(held and cfg.COL.dim or cfg.COL.text, 1)
+            while #nm > 3 and f9:getWidth(nm) > cellW - 4 do
+                nm = nm:sub(1, #nm - 1)
+            end
+            love.graphics.print(nm, math.floor(tx + cellW / 2 - f9:getWidth(nm) / 2), math.floor(ty + cellH - 18))
+            local lvStr = "Lv" .. (mon.level or 1)
+            love.graphics.print(lvStr, math.floor(tx + cellW / 2 - f9:getWidth(lvStr) / 2), math.floor(ty + cellH - 9))
+        end
+    end
+end
+
+return PCPopup

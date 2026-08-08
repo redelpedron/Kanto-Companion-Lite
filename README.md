@@ -1,105 +1,196 @@
-# Kanto Companion Lite (Android fork of matthew.me Kanto Companion)
+Kanto Companion Lite
 
-An in-game companion that loads directly on top of the game to enhance my
-playthrough of my childhood favorite game.
+An Android in-game companion for Pokémon Red and Blue, designed to enhance your playthrough with useful information and touch-friendly tools directly over the game.
 
-This fork is **Android-only**: every control is a touch button, drag, or tap —
-there are no keyboard shortcuts and no mouse-wheel dependencies.
+Kanto Companion Lite takes inspiration from the original Kanto Companion concept while providing its own Android-focused interface, responsive layouts, and touch-first experience.
 
-> **Fan-made; not affiliated with or endorsed by Nintendo / Game Freak / The Pokémon Company.**
+«Fan-made; not affiliated with or endorsed by Nintendo, Game Freak, or The Pokémon Company.»
 
-## Table of Contents
+Table of Contents
 
-- [Built On](#built-on)
-- [On-screen buttons](#on-screen-buttons)
-- [Overlay](#overlay)
-- [Items (Bag ⇄ PC)](#items-bag--pc)
-- [Party / Boxes](#party--boxes)
-- [Notes](#notes)
-- [Demos](#demos)
+- "Built On" (#built-on)
+- "Features" (#features)
+  - "On-screen Controls" (#on-screen-controls)
+  - "Overlay" (#overlay)
+  - "Items" (#items)
+  - "Party & Boxes" (#party--boxes)
+- "Responsive Layout" (#responsive-layout)
+- "Notes" (#notes)
+- "Demos" (#demos)
 
-## Built On
+Built On
 
-This addon is a mod for [**Gen1Recomp**](https://github.com/bryanthaboi/gen1recomp),
-a native LÖVE2D recreation of Pokémon Red and Blue (game data and graphics
-are decoded at runtime from a legally-supplied ROM; no ROM or decompiled
-assets ship with the base project). Gen1Recomp is where this addon is loaded
-and used — install it through Gen1Recomp's mod manager (**F10** in-game) as
-described in its own [README](https://github.com/bryanthaboi/gen1recomp#modding).
+Kanto Companion Lite is a mod for "Gen1Recomp" (https://github.com/bryanthaboi/gen1recomp), a native LÖVE2D recreation of Pokémon Red and Blue.
 
-## On-screen buttons
+The companion runs directly inside Gen1Recomp and can be installed through its built-in mod manager (F10 in-game), as described in the Gen1Recomp "README" (https://github.com/bryanthaboi/gen1recomp#modding).
 
-Three round buttons sit in the bottom-right corner, above the D-pad/A-B controls
-(left to right: **Party**, **Backpack**, **Toggle**):
+Kanto Companion Lite does not ship with the original game's ROM or decompiled game assets.
 
-- **Toggle** (bar icon) — shows/hides the live **overlay** (off by default).
-- **Backpack** icon — opens the **Items** screen (move items between your Bag
-  and the PC).
-- **Poké Ball** icon — opens the **Party / Boxes** screen (deposit, withdraw,
-  rearrange and swap Pokémon).
+Features
 
-Both screens pause the game while open. Tap the **X** in the corner, tap the
-same button again, or use the Android **back button** to close.
+On-screen Controls
 
-## Overlay
+Kanto Companion Lite provides touch-friendly controls for accessing its features without relying on a keyboard or mouse.
 
-- **Party** panel — sprite, HP bar (animated), XP-to-next, level, status,
-  types, and moves + PP. The mon that's out in battle is highlighted.
-- **Trainer / Route** panel — money, play time, badges, dex, plus route
-  encounters (grass/surf with %, level ranges, sprites). During a battle this
-  swaps to a battle readout: your best moves ranked by effectiveness + STAB,
-  the enemy's super-effective threats, a speed indicator, and — in wild
-  battles — live per-ball catch odds at the target's current HP/status.
+Three buttons are available in the bottom-right area of the game:
 
-Layout adapts to orientation:
+- Party — opens the Party / Boxes interface.
+- Backpack — opens the Items interface.
+- Toggle — shows or hides the live companion overlay.
 
-- **Landscape** — Party on the left, Trainer/Route (or Battle/Items in a
-  fight) on the right, side by side.
-- **Portrait** — a single full-width panel at a time; swipe left/right to
-  page through Party / Trainer / Items / Route (or Battle / Items / Party
-  during a fight), with dots showing your position. The Party page here is a
-  compact 2-column grid, and move sets are simplified to just current/max PP
-  (no room for move names at this width) — each PP value is still colored by
-  matchup effectiveness against whatever you're fighting, so the moves worth
-  using still stand out at a glance.
+The Items and Party / Boxes interfaces pause the game while open.
 
-The overlay is read-only. Panels scale to your window (designed against
-1440p); since the game renders widescreen they sit over the sides of the view.
+They can be closed using the X button, the corresponding control button, or the Android back button.
 
-## Items (Bag ⇄ PC)
+Overlay
 
-- **Drag** an item to the other side, or **tap** it then **tap** the other
-  side.
-- **Sort** each side by Type / A–Z / Qty (view only). On the **Bag** you can
-  **Save order** to make it stick in-game; the in-game **PC is always A–Z**, so
-  its sort is browsing-only.
-- A destination that can't accept the item turns **red** with the reason
-  (bag/PC full, stack maxed).
-- **Scroll** a list by dragging the scrollbar on its right edge.
-- **Landscape:** Bag and PC panels split the screen 50/50. **Portrait:** they
-  stack top/bottom instead of squeezing side by side.
+The companion overlay provides information that would otherwise require checking multiple in-game menus.
 
-## Party / Boxes
+Party
 
-- **Left/top:** your party (up to 6) with HP. **Right/bottom:** a rail of all
-  12 boxes plus the selected box as a sprite grid. Tap a box tab to switch.
-- **Grab** a Pokémon and drop it on a slot or a box tab to deposit / withdraw
-  / move between boxes. Dropping onto an **occupied** slot **swaps** the two.
-- Rules are enforced: boxes hold 20, the party holds 6, you can't deposit your
-  last Pokémon, and the party is **never left without a healthy Pokémon** (a
-  swap that brings a healthy one in is fine).
-- **Landscape:** party and boxes split the screen 50/50. **Portrait:** they
-  stack top/bottom instead of squeezing side by side.
+Displays information about your current party, including:
 
-## Notes
+- Pokémon sprite
+- HP and animated HP bar
+- Level
+- XP required for the next level
+- Status condition
+- Types
+- Moves and PP
 
-- Ships no game assets: sprites and the badge sheet are read from your own game
-  install at runtime, and it uses LÖVE's built-in font. A few symbols the font
-  lacks (♀/♂, some battle glyphs) are shown as safe text equivalents.
-- Android-only fork: keyboard shortcuts, mouse-wheel scrolling/quantity
-  adjustment, right-click-to-cancel, and desktop cursor handling have all been
-  removed in favor of touch-only controls.
+The Pokémon currently active in battle is highlighted.
 
-## Demos
+Trainer & Route
 
-- 🎥 [Demos](https://github.com/redelpedron/Kanto-Companion-Lite/releases/tag/demos)
+Displays trainer and progression information such as:
+
+- Money
+- Play time
+- Badges
+- Pokédex progress
+- Route information
+- Wild Pokémon encounters
+- Encounter percentages
+- Level ranges
+- Encounter sprites
+
+During battle, the panel changes into a battle-focused readout.
+
+Battle Information
+
+During battles, the companion can provide:
+
+- Recommended moves ranked by effectiveness
+- STAB information
+- Enemy super-effective threats
+- Speed comparison
+- Live catch probabilities during wild encounters
+- Catch probabilities adjusted for the target's current HP and status
+
+Items
+
+The Items interface allows items to be moved between your Bag and PC using touch controls.
+
+- Drag an item to the other side.
+- Or tap an item and then tap its destination.
+- Sort by Type, A–Z, or Quantity.
+- Save the Bag's ordering to make the arrangement persistent in-game.
+- PC ordering remains controlled by the game and is therefore browsing-only.
+- Invalid destinations are clearly indicated, including full bags, full PCs, and maximum stack limits.
+- Scroll through lists using the scrollbar on the edge of the panel.
+
+The layout adapts automatically to the available space:
+
+- Landscape: Bag and PC are displayed side by side.
+- Portrait: Bag and PC are arranged vertically.
+
+Party & Boxes
+
+Manage your party and PC boxes directly through a touch-based interface.
+
+The interface supports:
+
+- Depositing Pokémon
+- Withdrawing Pokémon
+- Moving Pokémon between boxes
+- Rearranging the party
+- Swapping Pokémon between occupied slots
+- Switching between all 12 PC boxes
+
+The interface enforces the game's party and box rules:
+
+- Party capacity is limited to 6 Pokémon.
+- Each PC box holds up to 20 Pokémon.
+- Your last Pokémon cannot be deposited.
+- The party cannot be left without a healthy Pokémon.
+- Swapping a Pokémon with a healthy Pokémon is permitted.
+
+Pokémon can be moved by grabbing them and dropping them onto:
+
+- An empty slot
+- An occupied slot
+- A PC box tab
+
+Dropping onto an occupied slot swaps the Pokémon.
+
+Responsive Layout
+
+The interface is designed around the available game viewport rather than relying on a single fixed device resolution.
+
+Landscape
+
+Panels make use of the additional horizontal space.
+
+- Party and Trainer/Route information can appear side by side.
+- Items use a Bag / PC split layout.
+- Party and PC boxes use a side-by-side layout.
+
+Portrait
+
+The interface reorganizes itself vertically to remain usable on narrower screens.
+
+The overlay displays one primary panel at a time and can be navigated by swiping horizontally.
+
+Depending on the current game state, available pages include:
+
+- Party
+- Trainer
+- Route
+- Items
+- Battle
+
+Page indicators show the current position.
+
+The Party page uses a compact two-column layout. Move information is condensed to current/max PP at narrow widths, while PP indicators retain matchup-based highlighting so useful moves remain immediately visible.
+
+Touch-First Design
+
+Kanto Companion Lite is designed specifically around touch interaction.
+
+It does not depend on:
+
+- Keyboard shortcuts
+- Mouse-wheel scrolling
+- Right-click actions
+- Desktop cursor behavior
+
+Interactions are instead built around:
+
+- Tapping
+- Dragging
+- Swiping
+- Touch-based scrolling
+
+This allows the companion to function naturally on Android devices without requiring desktop-style input.
+
+Notes
+
+Kanto Companion Lite ships without the game's original assets.
+
+Game sprites and other required visual data are obtained from the user's existing Gen1Recomp installation at runtime. The interface uses LÖVE's built-in font.
+
+Where the built-in font does not contain certain symbols, such as gender symbols or specific battle glyphs, safe text equivalents are used.
+
+Demos
+
+🎥 "Demos" (https://github.com/redelpedron/Kanto-Companion-Lite/releases/tag/demos)
