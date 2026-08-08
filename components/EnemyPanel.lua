@@ -85,23 +85,25 @@ function EnemyPanel:_drawTwoColumn(cfg, fonts, sprites, te, cr, x, y, w, h)
         love.graphics.draw(img, math.floor(x+8), math.floor(cy), 0, sc, sc)
     end
 
-    -- Pokéball indicator
-    local ballRadius = 4
-    local ballX = x + 44 - 10
-    local ballY = cy + 4
-    Colors.set({1, 0.2, 0.2}, 1)
-    love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY - ballRadius),
-                           math.floor(ballRadius * 2), math.floor(ballRadius))
-    Colors.set({1, 1, 1}, 1)
-    love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY),
-                           math.floor(ballRadius * 2), math.floor(ballRadius))
-    Colors.set({0, 0, 0}, 1)
-    love.graphics.setLineWidth(1)
-    love.graphics.line(ballX - ballRadius, ballY, ballX + ballRadius, ballY)
-    Colors.set({1, 1, 1}, 1)
-    love.graphics.circle("fill", ballX, ballY, 1.5)
-    Colors.set({0, 0, 0}, 1)
-    love.graphics.circle("line", ballX, ballY, 1.5)
+    -- Pokéball indicator (v2.0.1: only show if caught)
+    if en.caught then
+        local ballRadius = 4
+        local ballX = x + 44 - 10
+        local ballY = cy + 4
+        Colors.set({1, 0.2, 0.2}, 1)
+        love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY - ballRadius),
+                               math.floor(ballRadius * 2), math.floor(ballRadius))
+        Colors.set({1, 1, 1}, 1)
+        love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY),
+                               math.floor(ballRadius * 2), math.floor(ballRadius))
+        Colors.set({0, 0, 0}, 1)
+        love.graphics.setLineWidth(1)
+        love.graphics.line(ballX - ballRadius, ballY, ballX + ballRadius, ballY)
+        Colors.set({1, 1, 1}, 1)
+        love.graphics.circle("fill", ballX, ballY, 1.5)
+        Colors.set({0, 0, 0}, 1)
+        love.graphics.circle("line", ballX, ballY, 1.5)
+    end
 
     local f12 = fonts:getFont(12)
     love.graphics.setFont(f12)
@@ -271,27 +273,29 @@ function EnemyPanel:draw(ctx)
         love.graphics.draw(img, math.floor(x+8), math.floor(cy), 0, sc, sc)
     end
     
-    -- Draw pokéball indicator to the left of the name
-    local ballRadius = 5
-    local ballX = x + 48 - 12
-    local ballY = cy + 4
-    -- Top red half
-    Colors.set({1, 0.2, 0.2}, 1)
-    love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY - ballRadius), 
-                           math.floor(ballRadius * 2), math.floor(ballRadius))
-    -- Bottom white half
-    Colors.set({1, 1, 1}, 1)
-    love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY), 
-                           math.floor(ballRadius * 2), math.floor(ballRadius))
-    -- Black dividing line
-    Colors.set({0, 0, 0}, 1)
-    love.graphics.setLineWidth(1)
-    love.graphics.line(ballX - ballRadius, ballY, ballX + ballRadius, ballY)
-    -- White center circle
-    Colors.set({1, 1, 1}, 1)
-    love.graphics.circle("fill", ballX, ballY, 2)
-    Colors.set({0, 0, 0}, 1)
-    love.graphics.circle("line", ballX, ballY, 2)
+    -- Draw pokéball indicator to the left of the name (v2.0.1: only show if caught)
+    if en.caught then
+        local ballRadius = 5
+        local ballX = x + 48 - 12
+        local ballY = cy + 4
+        -- Top red half
+        Colors.set({1, 0.2, 0.2}, 1)
+        love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY - ballRadius), 
+                               math.floor(ballRadius * 2), math.floor(ballRadius))
+        -- Bottom white half
+        Colors.set({1, 1, 1}, 1)
+        love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY), 
+                               math.floor(ballRadius * 2), math.floor(ballRadius))
+        -- Black dividing line
+        Colors.set({0, 0, 0}, 1)
+        love.graphics.setLineWidth(1)
+        love.graphics.line(ballX - ballRadius, ballY, ballX + ballRadius, ballY)
+        -- White center circle
+        Colors.set({1, 1, 1}, 1)
+        love.graphics.circle("fill", ballX, ballY, 2)
+        Colors.set({0, 0, 0}, 1)
+        love.graphics.circle("line", ballX, ballY, 2)
+    end
     
     local f13 = fonts:getFont(13)
     love.graphics.setFont(f13)

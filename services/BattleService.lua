@@ -48,6 +48,14 @@ function BattleService:getEnemyData()
     local gameService = self._locator:resolve("GameService")
     local dPoke = gameService:getPokemonData()
     local def = dPoke[eMon.species]
+
+    -- FIX v2.0.1: check pokedex for caught status
+    local dex = gameService:getPokedex()
+    local caught = false
+    if dex and dex.owned then
+        caught = dex.owned[eMon.species] == true
+    end
+
     return {
         name = eMon.nickname or (def and def.name) or tostring(eMon.species),
         species = eMon.species,
@@ -57,6 +65,7 @@ function BattleService:getEnemyData()
         types = def and def.types or {},
         catchRate = def and def.catchRate or 0,
         status = eMon.status or "",
+        caught = caught,
     }
 end
 
