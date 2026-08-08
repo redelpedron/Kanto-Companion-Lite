@@ -1,4 +1,3 @@
-
 --- GameService: safe wrapper around the gen1recomp game reference.
 -- Abstracts engine internals so components never touch raw game state.
 local GameService = {}
@@ -105,7 +104,23 @@ function GameService:isInGame()
     local save = self:getSave()
     if not save then return false end
     local party = save.party
-    return party and #party > 0
+    if not party or #party == 0 then return false end
+
+    -- FIX: inspect the state stack for an actual overworld or battle state.
+    -- The title screen has neither, but may still have save.party loaded.
+    local stk = self:getStack()
+    if not (stk and stk.states and #stk.states > 0) then return false end
+
+    for i = #stk.states, 1, -1 do
+        local state = stk.states[i]
+        if type(state) == "table" then
+            -- Overworld states carry a 'map' field; battle states carry 'enemy' + 'player'
+            if state.map ~= nil or (state.enemy ~= nil and state.player ~= nil) then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 function GameService:isMenuOpen()

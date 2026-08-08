@@ -198,8 +198,7 @@ return function(mod)
                                  w=rects.rightContent.w, h=rects.rightContent.h, twoColumn=true })
         else
             enemyPan:setLayout({ x=rects.rightContent.x, y=rects.rightContent.y,
-                                 w=rects.rightContent.w, h=rects.rightContent.h,
-                                 twoColumn=false, wrapHeight=true })
+                                 w=rects.rightContent.w, h=rects.rightContent.h, twoColumn=false })
         end
         routePan:setLayout(rects.rightContent)
         itemsPan:setLayout(rects.rightContent)
@@ -207,45 +206,39 @@ return function(mod)
     end)
 
     local currentTabDrawers = {}
-    local function activateTab(idx)
-        for _, comp in ipairs({enemyPan, routePan, itemsPan}) do
-            comp:setActive(false)
+
+    bus:subscribe("hud.restored", function()
+        for i, comp in ipairs(currentTabDrawers) do
+            comp:setActive(i == tabs.activeIdx)
         end
-        if currentTabDrawers[idx] then
-            currentTabDrawers[idx]:setActive(true)
-        end
-    end
-    bus:subscribe("tab.changed", function(idx, label)
-        activateTab(idx)
     end)
 
-    -- UISystem forces every tabbed panel off while a native menu (e.g. the
-    -- battle Item list) is open, and has no way to turn the right one back
-    -- on itself once that menu closes -- see UISystem.lua. Restore whatever
-    -- tab was active before it closed.
-    bus:subscribe("hud.restored", function()
-        activateTab(tabs.activeIdx)
+    bus:subscribe("tab.changed", function(idx)
+        for i, comp in ipairs(currentTabDrawers) do
+            comp:setActive(i == idx)
+        end
     end)
 
     bus:subscribe("battle.started", function()
-        currentTabDrawers = { enemyPan }
-        tabs:setTabs({ "Battle" })
+        local drawers = { enemyPan }
+        local labels  = { "Enemy" }
+        table.insert(drawers, itemsPan)
+        table.insert(labels, "Items")
+        currentTabDrawers = drawers
+        tabs:setTabs(labels)
         tabs.activeIdx = 1
-        enemyPan:setActive(true)
-        routePan:setActive(false)
-        itemsPan:setActive(false)
-        local W, H = love.graphics.getDimensions()
-        local cfg = locator:resolve("ConfigService")
-        topBar:setLayout({ x=0, y=H-cfg.TOP_BAR_H, w=W, h=cfg.TOP_BAR_H })
+        for i, comp in ipairs(drawers) do
+            comp:setActive(i == 1)
+        end
     end)
 
     bus:subscribe("battle.ended", function()
-        -- The Encounter tab's real hasEnc check lives in route.updated,
-        -- which GameDataSystem republishes right away on the next tick;
-        -- default to Items only here and let that handler add Encounter
-        -- back in as soon as it knows the current route's data.
-        currentTabDrawers = { itemsPan }
-        local labels = { "Items" }
+        local drawers = {}
+        local labels  = {}
+        local hasEnc = false -- route will repopulate this
+        table.insert(drawers, itemsPan)
+        table.insert(labels, "Items")
+        currentTabDrawers = drawers
         tabs:setTabs(labels)
         tabs.activeIdx = 1
         enemyPan:setActive(false)
@@ -326,21 +319,26 @@ return function(mod)
 
     local _origUpdate = nil
     local _origDraw   = nil
+    local _wrappedGame = nil   -- FIX: track which game object we wrapped
 
     local function installHooks()
         local g = gameSvc:getGame()
-        if g and g.update and not _origUpdate then
-            _origUpdate = g.update
-            g.update = function(self, dt)
-                _origUpdate(self, dt)
-                -- Scheduler is registered with the ServiceLocator but is not
-                -- a Lifecycle System, so nothing else drives its tasks.
-                -- GameDataSystem's 0.2s tick() (party/trainer/route/inventory
-                -- data pull) is registered via scheduler:every() in its
-                -- init(), so without this call it silently never fires and
-                -- every panel is stuck on its empty default state.
-                sched:update(dt)
-                life:update(dt)
+        if g and g.update then
+            -- FIX: re-wrap if the game object has changed (e.g. quit to title screen)
+            if _wrappedGame ~= g then
+                _origUpdate = g.update
+                g.update = function(self, dt)
+                    _origUpdate(self, dt)
+                    -- Scheduler is registered with the ServiceLocator but is not
+                    -- a Lifecycle System, so nothing else drives its tasks.
+                    -- GameDataSystem's 0.2s tick() (party/trainer/route/inventory
+                    -- data pull) is registered via scheduler:every() in its
+                    -- init(), so without this call it silently never fires and
+                    -- every panel is stuck on its empty default state.
+                    sched:update(dt)
+                    life:update(dt)
+                end
+                _wrappedGame = g
             end
         end
         if love and love.draw and not _origDraw then
