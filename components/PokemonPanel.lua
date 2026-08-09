@@ -3,6 +3,7 @@ local Colors    = require("util.Colors")
 local Helpers   = require("util.Helpers")
 local Math      = require("util.Math")
 local ExpBar    = require("components.ExpBar")
+local TypeColors = require("util.TypeColors")
 
 local PokemonPanel = setmetatable({}, { __index = Component })
 PokemonPanel.__index = PokemonPanel
@@ -91,7 +92,7 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
             local f9 = fonts:getFont(9)
             love.graphics.setFont(f9)
             for _, t2 in ipairs(m.types) do
-                local tname = require("util.TypeColors").normalize(t2)
+                local tname = TypeColors.normalize(t2)
                 if tname ~= "" then
                     Colors.set(cfg.TYPE[tname] or cfg.COL.dim, 1)
                     love.graphics.print(tname, math.floor(tx), math.floor(cy+1))
@@ -223,22 +224,12 @@ function PokemonPanel:draw(ctx)
     local f14 = fonts:getFont(14)
     love.graphics.setFont(f14)
     Colors.set(cfg.COL.text, 1)
-    love.graphics.print("Party", math.floor(x+8), math.floor(y+6))
-    local countStr = tostring(#self.party) .. "/" .. tostring(cfg.PARTY_MAX)
-    local f10 = fonts:getFont(10)
-    love.graphics.setFont(f10)
-    Colors.set(cfg.COL.dim, 1)
-    love.graphics.print(countStr, math.floor(x+w-8-f10:getWidth(countStr)), math.floor(y+8))
-
-    if #self.party == 0 then
-        love.graphics.print("No data", math.floor(x+8), math.floor(y+24))
-        return
-    end
+    love.graphics.print("Party", math.floor(x+8), math.floor(y+4))
 
     if ctx.compact then
         self:_drawCompactStrip(cfg, fonts, sprites, x, y, w, h)
     else
-        self:_drawFullRows(cfg, fonts, sprites, te, x, y, w, drawH)
+        self:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
     end
 end
 

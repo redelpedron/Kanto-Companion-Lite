@@ -29,8 +29,9 @@ function GameDataSystem:tick()
     local dPoke  = self.gameService:getPokemonData()
     local dMove  = self.gameService:getMoveData()
     local rates  = self.gameService:getGrowthRates()
-    local growth = Helpers.safeRequire("src.pokemon.Growth")
-    local badges = Helpers.safeRequire("src.inventory.Badges")
+    -- FIX: engine internals accessed through GameService abstraction
+    local growth = self.gameService:getGrowthSystem()
+    local badges = self.gameService:getBadgeSystem()
     local battle = self._locator:resolve("BattleService"):currentBattle()
     local activeMon = battle and battle.player and battle.player.mon or nil
 

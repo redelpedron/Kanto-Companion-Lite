@@ -1,5 +1,7 @@
 --- GameService: safe wrapper around the gen1recomp game reference.
 -- Abstracts engine internals so components never touch raw game state.
+local Helpers = require("util.Helpers")
+
 local GameService = {}
 GameService.__index = GameService
 
@@ -133,6 +135,21 @@ end
 function GameService:getCurrentMapId()
     local ov = self:getOverworld()
     return ov and ov.map and ov.map.id
+end
+
+-- =======================================================================
+-- Engine abstraction: never let engine src.* paths leak outside GameService
+-- =======================================================================
+function GameService:getGrowthSystem()
+    return Helpers.safeRequire("src.pokemon.Growth")
+end
+
+function GameService:getBadgeSystem()
+    return Helpers.safeRequire("src.inventory.Badges")
+end
+
+function GameService:getBattleStateClass()
+    return Helpers.safeRequire("src.battle.BattleState")
 end
 
 return GameService

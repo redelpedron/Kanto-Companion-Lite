@@ -2,6 +2,7 @@ local Component = require("core.Component")
 local Colors    = require("util.Colors")
 local Helpers   = require("util.Helpers")
 local Math      = require("util.Math")
+local TypeColors = require("util.TypeColors")
 
 local EnemyPanel = setmetatable({}, { __index = Component })
 EnemyPanel.__index = EnemyPanel
@@ -108,7 +109,7 @@ function EnemyPanel:_drawTwoColumn(cfg, fonts, sprites, te, cr, x, y, w, h)
     local f12 = fonts:getFont(12)
     love.graphics.setFont(f12)
     Colors.set(cfg.COL.text, 1)
-    local nameStr = require("util.Helpers").sanitizeName(en.name)
+    local nameStr = Helpers.sanitizeName(en.name)
     love.graphics.print(nameStr, math.floor(x+44), math.floor(cy))
     if en.status and en.status ~= "" and en.status ~= "OK" then
         Colors.set(cfg.COL.lo, 1)
@@ -125,7 +126,7 @@ function EnemyPanel:_drawTwoColumn(cfg, fonts, sprites, te, cr, x, y, w, h)
         local f9 = fonts:getFont(9)
         love.graphics.setFont(f9)
         for _, t2 in ipairs(en.types) do
-            local tname = require("util.TypeColors").normalize(t2)
+            local tname = TypeColors.normalize(t2)
             if tname ~= "" then
                 Colors.set(cfg.TYPE[tname] or cfg.COL.dim, 1)
                 love.graphics.print(tname, math.floor(tx), math.floor(cy))
@@ -135,7 +136,7 @@ function EnemyPanel:_drawTwoColumn(cfg, fonts, sprites, te, cr, x, y, w, h)
     end
     cy = cy + 12
 
-    local frac = require("util.Math").clamp((en.hp or 0) / math.max(1, en.maxhp or 1), 0, 1)
+    local frac = Math.clamp((en.hp or 0) / math.max(1, en.maxhp or 1), 0, 1)
     local hpStr = string.format("%d/%d", en.hp or 0, en.maxhp or 1)
     local f9b = fonts:getFont(9)
     local hpTextW = f9b:getWidth(hpStr) + 12
@@ -143,7 +144,7 @@ function EnemyPanel:_drawTwoColumn(cfg, fonts, sprites, te, cr, x, y, w, h)
     Colors.set({0.12,0.12,0.14}, 1)
     love.graphics.rectangle("fill", math.floor(x+8), math.floor(cy), math.floor(barW), 5)
     if frac > 0 then
-        Colors.set(require("util.Colors").hpColor(frac), 1)
+        Colors.set(Colors.hpColor(frac), 1)
         love.graphics.rectangle("fill", math.floor(x+8), math.floor(cy), math.floor(barW*frac), 5)
     end
     love.graphics.setFont(f9b)
@@ -317,7 +318,7 @@ function EnemyPanel:draw(ctx)
         local f9 = fonts:getFont(9)
         love.graphics.setFont(f9)
         for _, t2 in ipairs(en.types) do
-            local tname = require("util.TypeColors").normalize(t2)
+            local tname = TypeColors.normalize(t2)
             if tname ~= "" then
                 Colors.set(cfg.TYPE[tname] or cfg.COL.dim, 1)
                 love.graphics.print(tname, math.floor(tx), math.floor(cy))

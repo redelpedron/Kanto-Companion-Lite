@@ -1,4 +1,3 @@
-
 --- Component: abstract base for all HUD widgets.
 -- Lifecycle: init -> update -> draw -> onEvent -> destroy
 -- Components receive only the services they declare via `needs`.
@@ -15,6 +14,8 @@ function Component.new(locator, props)
     self._active = true
     self._listeners = {}   -- list of unsubscribe functions
     self._initialized = false
+    -- FIX: track layout keys so stale ones can be cleared on the next setLayout
+    self._layoutKeys = {}
     return self
 end
 
@@ -49,17 +50,24 @@ function Component:_listen(eventName, handler)
     table.insert(self._listeners, unsub)
 end
 
---- Merge a layout rect (x, y, w, h, and any layout-specific extras like
--- isPortrait/section/stackMode) into this component's props. Only the
--- keys present in `rect` are touched, so other props a component holds
--- (e.g. data props like pokemonData set by a separate data-refresh
--- handler) are left alone. This is the one sanctioned way for outside
--- code to push layout geometry into a component -- callers should never
--- assign to `_props` directly.
+--- Merge a layout rect into this component's props.
+-- Only keys present in `rect` are touched, and any layout keys from a
+-- previous call that are *not* present in the new rect are removed.
+-- This prevents stale keys (e.g. twoColumn) from persisting across
+-- layout changes.
 function Component:setLayout(rect)
     if not rect then return end
+    -- Clear stale layout keys
+    for k, _ in pairs(self._layoutKeys) do
+        if rect[k] == nil then
+            self._props[k] = nil
+        end
+    end
+    -- Apply new layout keys and remember them
+    self._layoutKeys = {}
     for k, v in pairs(rect) do
         self._props[k] = v
+        self._layoutKeys[k] = true
     end
 end
 
