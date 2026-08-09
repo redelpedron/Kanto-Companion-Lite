@@ -23,7 +23,35 @@ function AppController:init()
     self:_subscribeEvents()
     self:_wrapHooks()
     self:_installGameHooks()
+    self:_registerUnload()
     self.mod.log:info("Kanto Companion Lite (refactored) loaded.")
+end
+
+-- =======================================================================
+-- Shutdown: clean restoration of all global hooks and lifecycle teardown
+-- =======================================================================
+function AppController:shutdown()
+    self.mod.log:info("Kanto Companion Lite shutting down...")
+
+    -- Restore game.update hook (only if our wrapper is still in place)
+    if self._wrappedGame and self._ourUpdate then
+        if self._wrappedGame.update == self._ourUpdate then
+            self._wrappedGame.update = self._origUpdate
+        end
+    end
+
+    -- Restore love.draw hook (only if our wrapper is still in place)
+    if love and love.draw and self._ourDraw and love.draw == self._ourDraw then
+        love.draw = self._origDraw
+    end
+
+    -- Teardown all components and systems (calls InputSystem:destroy(), etc.)
+    self.life:shutdown()
+
+    -- Cancel any pending scheduler tasks not tied to a system
+    if self.sched then
+        self.sched._tasks = {}
+    end
 end
 
 -- =======================================================================
@@ -53,6 +81,10 @@ function AppController:_createCore()
 
     local ConfigService = require("services.ConfigService")
     self.locator:register("ConfigService", ConfigService.new(self.locator))
+
+    -- FIX: register DrawContext so components never touch love.graphics directly
+    local DrawContext = require("util.DrawContext")
+    self.locator:register("DrawContext", DrawContext.new())
 end
 
 -- =======================================================================
@@ -201,10 +233,12 @@ function AppController:_subscribeEvents()
                 twoColumn = true,
             })
         else
+            -- FIX: add wrapHeight so landscape EnemyPanel shrinks to content
             self.enemyPan:setLayout({
                 x = rects.rightContent.x, y = rects.rightContent.y,
                 w = rects.rightContent.w, h = rects.rightContent.h,
                 twoColumn = false,
+                wrapHeight = true,
             })
         end
         self.routePan:setLayout(rects.rightContent)
@@ -236,6 +270,8 @@ function AppController:_subscribeEvents()
         self.currentTabDrawers = drawers
         self.tabs:setTabs(labels)
         self.tabs.activeIdx = 1
+        -- FIX: explicitly hide the encounter list so it doesn't paint over the battle
+        self.routePan:setActive(false)
         for i, comp in ipairs(drawers) do
             comp:setActive(i == 1)
         end
@@ -337,7 +373,9 @@ end
 -- =======================================================================
 function AppController:_installGameHooks()
     self._origUpdate = nil
+    self._ourUpdate  = nil
     self._origDraw   = nil
+    self._ourDraw    = nil
     self._wrappedGame = nil
 
     local function install()
@@ -345,26 +383,45 @@ function AppController:_installGameHooks()
         if g and g.update then
             if self._wrappedGame ~= g then
                 self._origUpdate = g.update
-                g.update = function(gameSelf, dt)
+                self._ourUpdate = function(gameSelf, dt)
                     self._origUpdate(gameSelf, dt)
                     self.sched:update(dt)
                     self.life:update(dt)
                 end
+                g.update = self._ourUpdate
                 self._wrappedGame = g
             end
         end
-        if love and love.draw and not self._origDraw then
+        if love and love.draw and not self._ourDraw then
             self._origDraw = love.draw
-            love.draw = function(...)
+            self._ourDraw = function(...)
                 if self._origDraw then self._origDraw(...) end
                 self.life:draw()
             end
+            love.draw = self._ourDraw
         end
     end
 
     self.mod.events:on("game.ready", install)
     if self.gameSvc:getGame() and self.gameSvc:getGame().save and love then
         install()
+    end
+end
+
+-- =======================================================================
+-- Mod unload registration
+-- =======================================================================
+function AppController:_registerUnload()
+    -- Store reference for external/manual cleanup
+    self.mod._kantoCompanionApp = self
+    -- Attempt to register an engine unload event if one exists
+    local ok = pcall(function()
+        self.mod.events:on("mod.unload", function()
+            self:shutdown()
+        end)
+    end)
+    if not ok then
+        self.locator:resolve("LogService"):info("mod.unload event not available; manual cleanup required")
     end
 end
 

@@ -17,7 +17,8 @@ return function(mod)
         "components.ExpBar", "components.ItemsPanel", "components.PCPopup",
         "components.PokemonPanel", "components.RoutePanel", "components.StatusWidget",
         "components.Tabs", "components.TopBar", "components.TypeEffectiveness",
-        "util.Colors", "util.Helpers", "util.Math", "util.TypeColors", "util.Viewport",
+        "util.Colors", "util.DrawContext", "util.Helpers", "util.Math",
+        "util.TypeColors", "util.Viewport",
     }
 
     local modBase = (mod.path or ("mods/" .. mod.id)):gsub("/+$", "")
