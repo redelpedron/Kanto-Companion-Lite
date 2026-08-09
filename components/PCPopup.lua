@@ -14,6 +14,7 @@ local Component = require("core.Component")
 local Colors    = require("util.Colors")
 local Helpers   = require("util.Helpers")
 local Viewport  = require("util.Viewport")
+local TypeColors = require("util.TypeColors")
 
 local PCPopup = setmetatable({}, { __index = Component })
 PCPopup.__index = PCPopup
@@ -567,6 +568,9 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
     love.graphics.rectangle("line", math.floor(p.x) + 0.5, math.floor(p.y) + 0.5, math.floor(p.w) - 1, math.floor(p.h) - 1)
 
     local party = pc:getParty()
+    local game = self:_service("GameService")
+    local growth = game:getGrowthSystem() if not growth then growth = {} end
+    local rates = game:getGrowthRates() or {}
 
     local f14 = fonts:getFont(14)
     love.graphics.setFont(f14)
@@ -578,12 +582,16 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
     Colors.set(cfg.COL.dim, 1)
     love.graphics.print(countStr, math.floor(p.x + p.w - 8 - f11:getWidth(countStr)), math.floor(p.y + 9))
 
-    local ry = p.y + 28
-    local rh = math.min(58, (p.h - 32) / 6)
+    -- Compact 45px rows: fits all 6 pokemon + header in ~300px
+    local ry = p.y + 26
+    local rh = 45
+    
     for i = 1, 6 do
         local y = ry + (i - 1) * rh
+        if y + rh > p.y + p.h then break end
+        
         local mon = party[i]
-        self:_hitRegion(p.x + 4, y, p.w - 8, rh - 4, "monslot", { loc = "party", box = nil, index = i, mon = mon })
+        self:_hitRegion(p.x + 4, y, p.w - 8, rh - 2, "monslot", { loc = "party", box = nil, index = i, mon = mon })
         local held = self.heldMon and self.heldMon.src.loc == "party" and self.heldMon.src.index == i
         if held then
             Colors.set(cfg.COL.gold, 0.18)
@@ -592,46 +600,114 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
         else
             Colors.set(cfg.COL.border, 0.04)
         end
-        love.graphics.rectangle("fill", math.floor(p.x + 4), math.floor(y), math.floor(p.w - 8), rh - 4)
+        love.graphics.rectangle("fill", math.floor(p.x + 4), math.floor(y), math.floor(p.w - 8), rh - 2)
 
         if mon then
+            -- 32px sprite
             local img = sprites:getSprite(mon.species, dPoke)
-            local ss = math.min(rh - 8, 40)
+            local ss = 32
             if img then
                 local iw, ih = img:getDimensions()
                 local sc = ss / math.max(iw, ih)
                 Colors.set(cfg.COL.text, 1)
-                love.graphics.draw(img, math.floor(p.x + 8), math.floor(y + (rh - 4 - ss) / 2), 0, sc, sc)
+                love.graphics.draw(img, math.floor(p.x + 6), math.floor(y + 6), 0, sc, sc)
             end
-            local nx = p.x + 8 + ss + 8
+            
+            local nx = p.x + 6 + ss + 6
             local def = dPoke[mon.species]
             local name = Helpers.sanitizeName(mon.nickname or (def and def.name) or mon.species)
-            local f12 = fonts:getFont(12)
-            love.graphics.setFont(f12)
+            local f11 = fonts:getFont(11)
+            love.graphics.setFont(f11)
             Colors.set(held and cfg.COL.dim or cfg.COL.text, 1)
-            love.graphics.print(name, math.floor(nx), math.floor(y + 4))
-
+            love.graphics.print(name, math.floor(nx), math.floor(y + 2))
+            
+            -- Lv X on same line as name
+            local lvStr = "Lv" .. (mon.level or 1)
+            local lvW = f11:getWidth(lvStr)
+            love.graphics.print(lvStr, math.floor(p.x + p.w - 8 - lvW), math.floor(y + 2))
+            
+            -- Status ailment tag (PSN, BRN, etc.)
+            if mon.status and mon.status ~= "" and mon.status ~= "OK" then
+                local statusStr = tostring(mon.status)
+                local f9 = fonts:getFont(9)
+                love.graphics.setFont(f9)
+                Colors.set(cfg.COL.lo, 1)
+                love.graphics.print("[" .. statusStr .. "]", math.floor(nx + f11:getWidth(name) + 4), math.floor(y + 2))
+            end
+            
+            -- Calculate XP progress
+            local xpProg = 0
+            if growth and def and def.growthRate and mon.exp and mon.level then
+                local cur = growth.expForLevel(def.growthRate, mon.level, rates)
+                local nxt = growth.expForLevel(def.growthRate, mon.level + 1, rates)
+                if mon.level >= 100 or nxt <= cur then
+                    xpProg = 1
+                else
+                    xpProg = math.max(0, math.min(1, (mon.exp - cur) / (nxt - cur)))
+                end
+            end
+            
+            -- Types (full names) with color coding
+            local typeY = y + 14
+            local f9 = fonts:getFont(9)
+            love.graphics.setFont(f9)
+            local typeX = nx
+            if def and def.types then
+                if type(def.types) == "table" then
+                    for idx, t in ipairs(def.types) do
+                        local typeName = TypeColors.normalize(tostring(t))
+                        local typeColor = TypeColors.getColor(typeName)
+                        Colors.set(typeColor, 1)
+                        love.graphics.print(typeName, math.floor(typeX), math.floor(typeY))
+                        typeX = typeX + f9:getWidth(typeName)
+                        if idx < #def.types then
+                            Colors.set(cfg.COL.dim, 0.7)
+                            love.graphics.print("/", math.floor(typeX), math.floor(typeY))
+                            typeX = typeX + f9:getWidth("/")
+                        end
+                    end
+                else
+                    local typeName = TypeColors.normalize(tostring(def.types))
+                    local typeColor = TypeColors.getColor(typeName)
+                    Colors.set(typeColor, 1)
+                    love.graphics.print(typeName, math.floor(typeX), math.floor(typeY))
+                end
+            end
+            
+            -- HP bar + values (right-aligned for fixed-width 000/000)
             local mx = (mon.stats and mon.stats.hp) or mon.hp or 1
             local hp = mon.hp or mx
             local frac = mx > 0 and hp / mx or 0
+            
+            -- HP values: right-aligned, fixed width
+            local hpStr = string.format("%3d/%3d", hp, mx)
+            local f9b = fonts:getFont(9)
+            love.graphics.setFont(f9b)
+            Colors.set(cfg.COL.dim, 1)
+            local hpW = f9b:getWidth(hpStr)
+            love.graphics.print(hpStr, math.floor(p.x + p.w - 8 - hpW), math.floor(typeY))
+            
+            -- HP bar (below name/level line)
+            local barW = (p.x + p.w - 8 - hpW - 4) - nx
+            local hpBarY = y + 26
+            Colors.set({ 0.12, 0.12, 0.14 }, 1)
+            love.graphics.rectangle("fill", math.floor(nx), math.floor(hpBarY), math.floor(barW), 3)
+            if frac > 0 then
+                Colors.set(Colors.hpColor(frac), 1)
+                love.graphics.rectangle("fill", math.floor(nx), math.floor(hpBarY), math.floor(barW * frac), 3)
+            end
+            
+            -- EXP bar (thin, below HP bar)
+            local expBarY = hpBarY + 4
+            Colors.set({ 0.12, 0.12, 0.14 }, 1)
+            love.graphics.rectangle("fill", math.floor(nx), math.floor(expBarY), math.floor(barW), 2)
+            Colors.set(cfg.COL.xp or { 0.3, 0.5, 0.9 }, 1)
+            love.graphics.rectangle("fill", math.floor(nx), math.floor(expBarY), math.floor(barW * xpProg), 2)
+        else
             local f10 = fonts:getFont(10)
             love.graphics.setFont(f10)
             Colors.set(cfg.COL.dim, 1)
-            love.graphics.print("Lv" .. (mon.level or 1) .. "  " .. hp .. "/" .. mx, math.floor(nx), math.floor(y + rh - 4 - 16))
-
-            local barW = p.w - (nx - p.x) - 12
-            local barY = y + rh - 4 - 8
-            Colors.set({ 0.12, 0.12, 0.14 }, 1)
-            love.graphics.rectangle("fill", math.floor(nx), math.floor(barY), math.floor(barW), 4)
-            if frac > 0 then
-                Colors.set(Colors.hpColor(frac), 1)
-                love.graphics.rectangle("fill", math.floor(nx), math.floor(barY), math.floor(barW * frac), 4)
-            end
-        else
-            local f11b = fonts:getFont(11)
-            love.graphics.setFont(f11b)
-            Colors.set(cfg.COL.dim, 1)
-            love.graphics.print("- empty -", math.floor(p.x + 10), math.floor(y + rh / 2 - 14))
+            love.graphics.print("- empty -", math.floor(p.x + 10), math.floor(y + rh / 2 - 8))
         end
     end
 end
