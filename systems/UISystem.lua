@@ -11,13 +11,12 @@
 --     shouldShow flips back on (e.g. a native menu closes), it publishes
 --     "hud.restored" so main.lua can turn the *previously* active one back
 --     on instead.
-local System = require("core.System")
-
-local UISystem = setmetatable({}, { __index = System })
+local UISystem = {}
 UISystem.__index = UISystem
 
 function UISystem.new(locator)
-    local self = setmetatable(System.new(locator), UISystem)
+    local self = setmetatable({}, UISystem)
+    self._locator = locator
     self.saveService = locator:resolve("SaveService")
     self.bus = locator:resolve("EventBus")
     self._components = {}

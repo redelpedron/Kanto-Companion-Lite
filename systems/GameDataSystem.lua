@@ -1,21 +1,25 @@
-local System = require("core.System")
 local Math    = require("util.Math")
 local Helpers = require("util.Helpers")
 
-local GameDataSystem = setmetatable({}, { __index = System })
+local GameDataSystem = {}
 GameDataSystem.__index = GameDataSystem
 
 function GameDataSystem.new(locator)
-    local self = setmetatable(System.new(locator), GameDataSystem)
+    local self = setmetatable({}, GameDataSystem)
+    self._locator = locator
     self.gameService = locator:resolve("GameService")
     self.bus = locator:resolve("EventBus")
-    self.scheduler = locator:resolve("Scheduler")
-    self._task = nil
+    self._acc = 0
+    self._interval = 0.2 -- throttled: full snapshot + bus publish is too heavy for every frame
     return self
 end
 
-function GameDataSystem:init()
-    self._task = self.scheduler:every(0.2, function() self:tick() end)
+--- Runs every frame via Lifecycle, but only does real work every 0.2s.
+function GameDataSystem:update(dt)
+    self._acc = self._acc + dt
+    if self._acc < self._interval then return end
+    self._acc = self._acc - self._interval
+    self:tick()
 end
 
 function GameDataSystem:tick()
@@ -153,10 +157,6 @@ function GameDataSystem:tick()
     else
         self.bus:publish("route.updated", nil)
     end
-end
-
-function GameDataSystem:destroy()
-    if self._task then self._task() end
 end
 
 return GameDataSystem

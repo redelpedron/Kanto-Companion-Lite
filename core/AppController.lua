@@ -3,10 +3,9 @@
 local AppController = {}
 AppController.__index = AppController
 
-function AppController.new(mod, registeredPreloads)
+function AppController.new(mod)
     local self = setmetatable({}, AppController)
     self.mod = mod
-    self.registeredPreloads = registeredPreloads
     return self
 end
 
@@ -47,11 +46,6 @@ function AppController:shutdown()
 
     -- Teardown all components and systems (calls InputSystem:destroy(), etc.)
     self.life:shutdown()
-
-    -- Cancel any pending scheduler tasks not tied to a system
-    if self.sched then
-        self.sched._tasks = {}
-    end
 end
 
 -- =======================================================================
@@ -61,15 +55,12 @@ function AppController:_createCore()
     local ServiceLocator = require("core.ServiceLocator")
     local EventBus       = require("core.EventBus")
     local Lifecycle      = require("core.Lifecycle")
-    local Scheduler      = require("core.Scheduler")
 
     self.locator = ServiceLocator.new()
     self.bus     = EventBus.new()
     self.life    = Lifecycle.new()
-    self.sched   = Scheduler.new()
 
     self.locator:register("EventBus", self.bus)
-    self.locator:register("Scheduler", self.sched)
     self.locator:register("Lifecycle", self.life)
 
     local LogService = require("services.LogService")
@@ -77,7 +68,6 @@ function AppController:_createCore()
     log:setModLog(self.mod.log)
     self.locator:register("LogService", log)
     self.bus:setLogger(log)
-    self.sched:setLogger(log)
     self.life:setLogger(log)
     self.life:setLocator(self.locator)
 
@@ -377,7 +367,6 @@ function AppController:_installGameHooks()
                 self._origUpdate = g.update
                 self._ourUpdate = function(gameSelf, dt)
                     self._origUpdate(gameSelf, dt)
-                    self.sched:update(dt)
                     self.life:update(dt)
                 end
                 g.update = self._ourUpdate

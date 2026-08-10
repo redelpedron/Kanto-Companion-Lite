@@ -1,11 +1,9 @@
-local System = require("core.System")
-local Colors = require("util.Colors")
-
-local RenderSystem = setmetatable({}, { __index = System })
+local RenderSystem = {}
 RenderSystem.__index = RenderSystem
 
 function RenderSystem.new(locator)
-    local self = setmetatable(System.new(locator), RenderSystem)
+    local self = setmetatable({}, RenderSystem)
+    self._locator = locator
     self.components = {}
     self._drawErr = nil
     self._drawErrCount = 0

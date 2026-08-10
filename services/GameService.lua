@@ -20,7 +20,19 @@ function GameService:setGame(game)
     end
 end
 
+-- FIX (v2.0.27): game.ready is emitted without a guaranteed payload -- if
+-- payload.game is ever missing, self._game stayed nil forever and the
+-- love.draw/game.update install in AppController:_installGameHooks() would
+-- silently never run, permanently hiding the whole overlay. Other content
+-- mods (e.g. quest systems) work around this same engine quirk by falling
+-- back to requiring the live Game singleton directly; do the same here so
+-- we don't depend on a single event payload ever arriving intact.
 function GameService:getGame()
+    if self._game then return self._game end
+    local ok, game = pcall(require, "src.core.Game")
+    if ok and game and game.save and game.data then
+        self:setGame(game)
+    end
     return self._game
 end
 

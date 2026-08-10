@@ -1,10 +1,9 @@
-local System = require("core.System")
-
-local BattleSystem = setmetatable({}, { __index = System })
+local BattleSystem = {}
 BattleSystem.__index = BattleSystem
 
 function BattleSystem.new(locator)
-    local self = setmetatable(System.new(locator), BattleSystem)
+    local self = setmetatable({}, BattleSystem)
+    self._locator = locator
     self.battleService = locator:resolve("BattleService")
     self.bus = locator:resolve("EventBus")
     self._wasInBattle = false

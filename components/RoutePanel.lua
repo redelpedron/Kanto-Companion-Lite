@@ -147,6 +147,16 @@ function RoutePanel:draw(ctx)
     local cy = y + 8 - scrollOffset
     local maxCy = y + drawH - 4
 
+    local f9 = fonts:getFont(9)
+    love.graphics.setFont(f9)
+    -- Fixed column widths sized to the widest realistic value, not to any
+    -- one row's actual string -- keeps both columns lined up straight down
+    -- the list instead of wobbling with digit count.
+    local COL_PCT_W = f9:getWidth("100%")
+    local COL_GAP   = 6
+    local pctColRight = x + w - 8
+    local lvColRight  = pctColRight - COL_PCT_W - COL_GAP
+
     local function drawSec(title, tab)
         if not tab or not tab.species or #tab.species == 0 then return end
         if cy + 18 > maxCy then return end
@@ -174,12 +184,11 @@ function RoutePanel:draw(ctx)
             else
                 lv = "Lv" .. sp.minLevel .. "-" .. sp.maxLevel
             end
-            local f9 = fonts:getFont(9)
             love.graphics.setFont(f9)
-            Colors.set(cfg.COL.dim, 1)
-            love.graphics.print(lv, math.floor(x+w-8-f9:getWidth(lv)), math.floor(cy))
             Colors.set(cfg.COL.text, 1)
-            love.graphics.print(sp.pct .. "%", math.floor(x+w-8-f9:getWidth(lv.."  ")-f9:getWidth(sp.pct.."%")), math.floor(cy))
+            love.graphics.print(sp.pct .. "%", math.floor(pctColRight - f9:getWidth(sp.pct.."%")), math.floor(cy))
+            Colors.set(cfg.COL.dim, 1)
+            love.graphics.print(lv, math.floor(lvColRight - f9:getWidth(lv)), math.floor(cy))
             cy = cy + 18
         end
         cy = cy + 4

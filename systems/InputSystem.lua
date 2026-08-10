@@ -1,10 +1,9 @@
-local System = require("core.System")
-
-local InputSystem = setmetatable({}, { __index = System })
+local InputSystem = {}
 InputSystem.__index = InputSystem
 
 function InputSystem.new(locator)
-    local self = setmetatable(System.new(locator), InputSystem)
+    local self = setmetatable({}, InputSystem)
+    self._locator = locator
     self.bus = locator:resolve("EventBus")
     self._origTouch = nil
     self._origTouchRelease = nil

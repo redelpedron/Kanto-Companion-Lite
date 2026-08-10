@@ -1,10 +1,9 @@
-local System = require("core.System")
-
-local LayoutSystem = setmetatable({}, { __index = System })
+local LayoutSystem = {}
 LayoutSystem.__index = LayoutSystem
 
 function LayoutSystem.new(locator)
-    local self = setmetatable(System.new(locator), LayoutSystem)
+    local self = setmetatable({}, LayoutSystem)
+    self._locator = locator
     self.cfg = locator:resolve("ConfigService")
     self.bus = locator:resolve("EventBus")
     self.currentLayout = nil

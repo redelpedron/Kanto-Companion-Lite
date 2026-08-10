@@ -45,27 +45,28 @@ function Lifecycle:createComponent(Class, locator, props)
     return instance
 end
 
---- Register a system.
+--- Register a system. Systems are plain tables now (no shared base class) --
+-- each only implements the lifecycle methods it actually uses.
 function Lifecycle:registerSystem(system)
     table.insert(self._systems, system)
-    system:init()
+    if system.init then system:init() end
     return system
 end
 
---- Update all active components and systems.
+--- Update all systems and active components.
 function Lifecycle:update(dt)
     for _, sys in ipairs(self._systems) do
-        if sys:isActive() then sys:update(dt) end
+        if sys.update then sys:update(dt) end
     end
     for _, comp in ipairs(self._components) do
         if comp:isActive() then comp:update(dt) end
     end
 end
 
---- Draw all active components via the RenderSystem.
+--- Draw all systems that draw (currently just RenderSystem).
 function Lifecycle:draw()
     for _, sys in ipairs(self._systems) do
-        if sys:isActive() then sys:draw() end
+        if sys.draw then sys:draw() end
     end
 end
 
@@ -87,7 +88,9 @@ function Lifecycle:shutdown()
     end
     self._components = {}
     for _, sys in ipairs(self._systems) do
-        pcall(function() sys:destroy() end)
+        pcall(function()
+            if sys.destroy then sys:destroy() end
+        end)
     end
     self._systems = {}
 end
