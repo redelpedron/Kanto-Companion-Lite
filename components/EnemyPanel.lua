@@ -13,6 +13,10 @@ function EnemyPanel.new(locator, props)
     self.enemy = nil
     self.activeMon = nil
     self.inventory = {}
+    -- Caption text (see _drawContent): nil outside of trainer battles, so
+    -- the panel reads "Wild Battle"; set to the trainer's name whenever
+    -- one is fighting, same event the Rival tab label already uses.
+    self.trainerName = nil
     return self
 end
 
@@ -20,6 +24,7 @@ function EnemyPanel:init()
     self:_listen("enemy.updated", function(_, enemy) self.enemy = enemy end)
     self:_listen("active_mon.changed", function(_, mon) self.activeMon = mon end)
     self:_listen("inventory.updated", function(_, inv) self.inventory = inv or {} end)
+    self:_listen("rival_trainer.updated", function(_, name) self.trainerName = name end)
 end
 
 function EnemyPanel:_contentHeight(w)
@@ -85,7 +90,8 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
     local f10 = fonts:getFont(10)
     love.graphics.setFont(f10)
     Colors.set(cfg.COL.dim, 1)
-    love.graphics.print("Wild Battle", math.floor(x+8), math.floor(cy))
+    -- FIX v2.1.30: was hardcoded "Wild Battle" even for trainer fights.
+    love.graphics.print(self.trainerName and "Trainer Battle" or "Wild Battle", math.floor(x+8), math.floor(cy))
     cy = cy + 16
 
     local img = sprites:getSprite(en.species, self._props.pokemonData)

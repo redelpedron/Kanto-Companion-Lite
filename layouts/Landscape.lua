@@ -32,6 +32,12 @@ return function(W, H, cfg)
         -- portrait content" bug this guards against.
         topBar   = { x=x0, y=topY, w=usableW, h=topH, isPortrait=false, stackMode=false },
         party    = { x=x0, y=topY+topH, w=sideW, h=safeB-(topY+topH), isPortrait=false, compact=false },
+        -- Party column's own tab-strip/body split (Party / Rival), mirroring
+        -- the right column below. Only Landscape publishes these two keys --
+        -- Portrait has no party tab strip, so AppController falls back to
+        -- plain `party` (untabbed, single panel) whenever they're absent.
+        partyTabs    = { x=x0, y=topY+topH, w=sideW, h=tabH },
+        partyContent = { x=x0, y=topY+topH+tabH, w=sideW, h=safeB-(topY+topH)-tabH, isPortrait=false, compact=false },
         right    = right,
         -- Right column's own tab-strip/body split, so main.lua (or any
         -- other caller) never has to know the right panel is internally

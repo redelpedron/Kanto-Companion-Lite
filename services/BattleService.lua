@@ -42,6 +42,58 @@ function BattleService:getPlayerActiveMon()
     return battle and battle.player and battle.player.mon
 end
 
+-- Trainer battles carry a `battle.trainer` table (see e.g. how
+-- eevee_three_stones overrides its `.name` for custom encounters); wild
+-- encounters have none. Used to gate and label the Rival tab.
+function BattleService:getEnemyTrainer()
+    local battle = self:currentBattle()
+    return battle and battle.trainer or nil
+end
+
+function BattleService:getEnemyTrainerName()
+    local trainer = self:getEnemyTrainer()
+    return trainer and trainer.name or nil
+end
+
+function BattleService:isTrainerBattle()
+    return self:getEnemyTrainer() ~= nil
+end
+
+-- Full enemy roster for the Rival tab. The roster lives under
+-- `trainer.parties`, itself a table of alternate teams; `trainer.index`
+-- selects which one is active this battle. Older field-name guesses
+-- kept as a fallback for any trainer type that doesn't match this shape.
+function BattleService:getEnemyParty()
+    local battle  = self:currentBattle()
+    local trainer = battle and battle.trainer
+    local enemy   = battle and battle.enemy
+
+    if trainer then
+        local parties = trainer.parties
+        local roster = type(parties) == "table" and (parties[trainer.index] or parties[1])
+        if type(roster) == "table" and #roster > 0 then
+            return roster
+        end
+
+        roster = trainer.party or trainer.team or trainer.pokemon or trainer.mons
+        if type(roster) == "table" and #roster > 0 then
+            return roster
+        end
+    end
+
+    if enemy then
+        local roster = enemy.party or enemy.team or enemy.mons or enemy.pokemon
+        if type(roster) == "table" and #roster > 0 then
+            return roster
+        end
+    end
+
+    if enemy and enemy.mon then
+        return { enemy.mon }
+    end
+    return {}
+end
+
 function BattleService:getEnemyData()
     local eMon = self:getEnemyMon()
     if not eMon then return nil end

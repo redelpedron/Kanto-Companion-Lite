@@ -29,10 +29,18 @@ function PokemonPanel.new(locator, props)
     return self
 end
 
+-- Reused for both the player's party (default event names) and the
+-- landscape-only Rival tab (partyEvent="rival.updated",
+-- activeMonEvent="enemy_active_mon.changed", trackEnemyTypes=false --
+-- matchup highlighting is about the player's own mons, not the rival's).
 function PokemonPanel:init()
-    self:_listen("party.updated", function(_, party) self.party = party or {} end)
-    self:_listen("enemy.updated", function(_, enemy) self.enemyTypes = enemy and enemy.types or nil end)
-    self:_listen("active_mon.changed", function(_, mon) self.activeMon = mon end)
+    local partyEvent     = self._props.partyEvent or "party.updated"
+    local activeMonEvent = self._props.activeMonEvent or "active_mon.changed"
+    self:_listen(partyEvent, function(_, party) self.party = party or {} end)
+    if self._props.trackEnemyTypes ~= false then
+        self:_listen("enemy.updated", function(_, enemy) self.enemyTypes = enemy and enemy.types or nil end)
+    end
+    self:_listen(activeMonEvent, function(_, mon) self.activeMon = mon end)
     self:_listen("battle.ended", function() self.activeMon = nil end)
 end
 
@@ -59,6 +67,14 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, dc, x, y, w, h)
     local rowH    = cfg.PARTY_ROW_H
     local cy      = y + headerH
     local maxCy   = y + h - cfg.PARTY_PANEL_PAD_B
+
+    if #self.party == 0 and self._props.emptyMessage then
+        local f11 = fonts:getFont(11)
+        dc:setFont(f11)
+        dc:setColor(cfg.COL.dim, 1)
+        dc:print(self._props.emptyMessage, x+8, cy)
+        return
+    end
 
     for _, m in ipairs(self.party) do
         if cy + rowH > maxCy then break end
@@ -105,16 +121,21 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, dc, x, y, w, h)
         dc:setColor(cfg.COL.dim, 1)
         local lvStr = "Lv" .. tostring(m.level)
         dc:print(lvStr, x+w-8-f10b:getWidth(lvStr), cy)
-        local frac = Math.clamp((hp or 0) / math.max(1, maxhp or 1), 0, 1)
+        -- v2.1.35: maxhp is nil for a benched rival-roster mon (its HP
+        -- genuinely isn't known until it's sent into battle -- see
+        -- GameDataSystem). Render that as "unknown" instead of a fake
+        -- 0/1, which read as the Pokemon being nearly fainted.
+        local known = maxhp ~= nil
+        local frac = known and Math.clamp((hp or 0) / math.max(1, maxhp), 0, 1) or 0
         local barW = w - 44 - 50
         local barY = cy + 11
         dc:setColor({0.12,0.12,0.14}, 1)
         dc:rectangle("fill", x+36, barY, barW, 4)
-        if frac > 0 then
+        if known and frac > 0 then
             dc:setColor(Colors.hpColor(frac), 1)
             dc:rectangle("fill", x+36, barY, barW*frac, 4)
         end
-        local hpStr = string.format("%3d/%3d", hp or 0, maxhp or 1)
+        local hpStr = known and string.format("%3d/%3d", hp or 0, maxhp) or "?"
         dc:setFont(f10b)
         dc:setColor(cfg.COL.dim, 1)
         dc:print(hpStr, x+w-8-f10b:getWidth(hpStr), cy+10)
@@ -225,7 +246,7 @@ function PokemonPanel:draw(ctx)
     local f14 = fonts:getFont(14)
     dc:setFont(f14)
     dc:setColor(cfg.COL.text, 1)
-    dc:print("Party", x+8, y+4)
+    dc:print(self._props.label or "Party", x+8, y+4)
 
     if ctx.compact then
         self:_drawCompactStrip(cfg, fonts, sprites, dc, x, y, w, h)

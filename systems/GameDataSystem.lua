@@ -36,7 +36,8 @@ function GameDataSystem:tick()
     -- FIX: engine internals accessed through GameService abstraction
     local growth = self.gameService:getGrowthSystem()
     local badges = self.gameService:getBadgeSystem()
-    local battle = self._locator:resolve("BattleService"):currentBattle()
+    local battleSvc = self._locator:resolve("BattleService")
+    local battle = battleSvc:currentBattle()
     local activeMon = battle and battle.player and battle.player.mon or nil
 
     local party = {}
@@ -69,6 +70,52 @@ function GameDataSystem:tick()
         }
     end
     self.bus:publish("party.updated", party)
+
+    -- Landscape-only Rival tab: the opposing trainer's full roster, built
+    -- the same way as the player's party above but with no xpProgress
+    -- field, so PokemonPanel's existing "only draw the xp bar if the row
+    -- has one" check already leaves it off without any extra flag.
+    -- Wild encounters have no trainer, so this stays empty and the Rival
+    -- panel shows its "no trainer battle" placeholder instead.
+    local rival = {}
+    if battleSvc:isTrainerBattle() then
+        local enemyActiveMon = battleSvc:getEnemyMon()
+        for i, mon in ipairs(battleSvc:getEnemyParty()) do
+            local def = dPoke[mon.species]
+            -- trainer.parties entries only ever carry {level, species} --
+            -- no hp/stats/moves/status. That data doesn't exist until the
+            -- mon is actually sent into battle, at which point it lives
+            -- in a *separate* live object (battle.enemy.mon, i.e.
+            -- enemyActiveMon here). Matches how Gen 1 trainer data has
+            -- always worked: a trainer's remaining roster is genuinely
+            -- just species+level until it's sent out.
+            --
+            -- FIX: `active` used to compare `mon == enemyActiveMon` --
+            -- table identity between two different tables that can never
+            -- be the same object, so it was always false, for every row,
+            -- every battle. That's also why the live-HP override already
+            -- built into PokemonPanel:_liveStats() never engaged even for
+            -- the mon actually on the field. Match by species+level
+            -- instead. hp/maxhp/status are left nil for benched mons
+            -- (PokemonPanel now renders that as "unknown" rather than a
+            -- misleading 0/1) since we genuinely don't know them yet.
+            local isActive = enemyActiveMon ~= nil
+                and mon.species == enemyActiveMon.species
+                and mon.level == enemyActiveMon.level
+            rival[i] = {
+                name = def and def.name or tostring(mon.species),
+                species = mon.species,
+                level = mon.level or 0,
+                hp = isActive and enemyActiveMon.hp or nil,
+                maxhp = isActive and enemyActiveMon.stats and enemyActiveMon.stats.hp or nil,
+                status = isActive and enemyActiveMon.status or nil,
+                types = def and def.types or {},
+                active = isActive,
+                pokemonData = dPoke,
+            }
+        end
+    end
+    self.bus:publish("rival.updated", rival)
 
     local dex = self.gameService:getPokedex()
     local badgeCount = 0

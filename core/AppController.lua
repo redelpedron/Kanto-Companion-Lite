@@ -163,19 +163,62 @@ function AppController:_createUIComponents()
 
     self.topBar   = self.life:createComponent(TopBar, self.locator, {})
     self.partyPan = self.life:createComponent(PokemonPanel, self.locator, {})
+
+    -- Landscape-only Rival tab: same row layout as partyPan (PokemonPanel),
+    -- fed from the opposing trainer's roster instead of the player's party.
+    -- trackEnemyTypes=false: the super-effective name glow is about the
+    -- *player's* mons vs the enemy, not the enemy's mons vs itself.
+    -- No xpProgress ever gets set on rival rows (see GameDataSystem), so
+    -- PokemonPanel's existing per-row check already leaves the xp bar off.
+    self.rivalPan = self.life:createComponent(PokemonPanel, self.locator, {
+        partyEvent = "rival.updated",
+        activeMonEvent = "enemy_active_mon.changed",
+        trackEnemyTypes = false,
+        label = "Rival",
+        emptyMessage = "No trainer battle",
+    })
+
     self.enemyPan = self.life:createComponent(EnemyPanel, self.locator, { pokemonData={}, moveData={} })
     self.routePan = self.life:createComponent(RoutePanel, self.locator, { pokemonData={} })
     self.itemsPan = self.life:createComponent(ItemsPanel, self.locator, {})
     self.tabs     = self.life:createComponent(Tabs, self.locator, { x=0, y=0, w=100, tabs={}, activeIdx=1 })
 
+    -- Second, independent tab strip for the party column (landscape only).
+    -- changeEvent keeps its taps from colliding with the right column's
+    -- "tab.changed" on the shared EventBus.
+    self.partyTabs = self.life:createComponent(Tabs, self.locator, {
+        x=0, y=0, w=100, tabs={ "Party", "Rival" }, activeIdx=1,
+        changeEvent = "party_tab.changed",
+    })
+
     -- PCPopup is a full-screen modal, not driven by UISystem
     self.pcPopup  = self.life:createComponent(PCPopup, self.locator, {})
     self.pcPopup:setActive(false)
+
+    -- Rival tab and its tab strip start hidden: we don't know yet whether
+    -- we're in landscape (layout.updated hasn't fired), and the tab strip
+    -- itself only ever appears once a trainer battle is actually underway
+    -- (see _hasRivalTrainer / rival_trainer.updated below) -- wild
+    -- encounters and free-roam never show it, even in landscape.
+    self.rivalPan:setActive(false)
+    self.partyTabs:setActive(false)
+    self.currentPartyDrawers = { self.partyPan }
+    self._isLandscapeParty = false
+    -- True only while BattleSystem reports an opposing trainer (see
+    -- rival_trainer.updated). Gates whether the Party/Rival tab strip is
+    -- allowed to show at all, independent of orientation.
+    self._hasRivalTrainer = false
+    -- Most recent rects from layout.updated, replayed through
+    -- _applyPartyLayout() whenever _hasRivalTrainer flips so the tab strip
+    -- can appear/disappear mid-battle without waiting on a resize/rotate.
+    self._lastLayoutRects = nil
 end
 
 function AppController:_registerRenderables()
     self.renderSys:registerComponent(self.topBar)
+    self.renderSys:registerComponent(self.partyTabs)
     self.renderSys:registerComponent(self.partyPan)
+    self.renderSys:registerComponent(self.rivalPan)
     self.renderSys:registerComponent(self.enemyPan)
     self.renderSys:registerComponent(self.routePan)
     self.renderSys:registerComponent(self.itemsPan)
@@ -186,7 +229,14 @@ end
 
 function AppController:_wireUISystem()
     self.uiSys:registerComponent("topBar", self.topBar)
-    self.uiSys:registerComponent("party", self.partyPan)
+    -- party/rival/partyTabs are tabbed=true: like the right column, only
+    -- one of party/rival is ever visible at a time (landscape) or only
+    -- party ever exists at all (portrait), and this system must only ever
+    -- turn them OFF -- _applyPartyTab()/layout.updated/hud.restored below
+    -- own turning them back on.
+    self.uiSys:registerComponent("party", self.partyPan, true)
+    self.uiSys:registerComponent("rival", self.rivalPan, true)
+    self.uiSys:registerComponent("partyTabs", self.partyTabs, true)
     self.uiSys:registerComponent("enemy", self.enemyPan, true)
     self.uiSys:registerComponent("route", self.routePan, true)
     self.uiSys:registerComponent("items", self.itemsPan, true)
@@ -205,7 +255,12 @@ function AppController:_subscribeEvents()
         -- New TopBar consolidation: single topBar with stackMode in portrait
         self.topBar:setLayout(rects.topBar)
 
-        self.partyPan:setLayout(rects.party)
+        -- Party column: landscape gets a Party/Rival tab strip (see
+        -- Landscape.lua's partyTabs/partyContent), but only while a trainer
+        -- battle is actually on (_hasRivalTrainer); otherwise -- and always
+        -- in portrait, which has neither key -- it falls back to the
+        -- original single, untabbed panel.
+        self:_applyPartyLayout(rects)
 
         local inBattle = locator:resolve("BattleService"):isInBattle()
         if inBattle and rects.isPortrait then
@@ -235,11 +290,44 @@ function AppController:_subscribeEvents()
         for i, comp in ipairs(self.currentTabDrawers) do
             comp:setActive(i == self.tabs.activeIdx)
         end
+        -- Party column: in portrait this is always just {partyPan}; in
+        -- landscape it's whichever of party/rival was last selected.
+        for _, comp in ipairs(self.currentPartyDrawers or {}) do
+            comp:setActive(true)
+        end
+        if self._isLandscapeParty then
+            self.partyTabs:setActive(true)
+        end
     end)
 
     bus:subscribe("tab.changed", function(idx)
         for i, comp in ipairs(self.currentTabDrawers) do
             comp:setActive(i == idx)
+        end
+    end)
+
+    -- Party/Rival tab strip (landscape only) ------------------------------
+    bus:subscribe("party_tab.changed", function(idx)
+        self:_applyPartyTab(idx)
+    end)
+
+    -- Rival tab label: falls back to "Rival" outside of trainer battles
+    -- (or before the first one starts), and to the actual trainer's name
+    -- once BattleSystem reports one. `name` is nil for wild encounters and
+    -- whenever no battle is running (see BattleSystem), so it doubles as
+    -- the trainer-battle flag that gates the tab strip itself below.
+    bus:subscribe("rival_trainer.updated", function(name)
+        self.partyTabs:setTabs({ "Party", name or "Rival" })
+        self.rivalPan._props.label = name or "Rival"
+
+        local hasTrainer = name ~= nil
+        if hasTrainer ~= self._hasRivalTrainer then
+            self._hasRivalTrainer = hasTrainer
+            -- Re-run the party column layout immediately so the tab strip
+            -- appears/disappears the instant the trainer battle starts or
+            -- ends, rather than waiting on the next resize/rotate to pick
+            -- up the new _hasRivalTrainer value.
+            self:_applyPartyLayout(self._lastLayoutRects)
         end
     end)
 
@@ -310,6 +398,58 @@ function AppController:_subscribeEvents()
         self.gameSvc:setGame((p and p.game) or self.gameSvc:getGame())
         self.battleSvc:setBattleStateClass(self.gameSvc:getBattleStateClass())
     end)
+end
+
+-- =======================================================================
+-- Party column tab switching (landscape only: Party / Rival)
+-- =======================================================================
+-- Decides whether the party column shows the tabbed Party/Rival strip or
+-- falls back to a single untabbed panel, and lays out whichever is active.
+-- Tabbed mode requires BOTH landscape (rects.partyTabs present) AND an
+-- actual trainer battle in progress (self._hasRivalTrainer) -- so the
+-- Rival tab never appears outside of a rival/trainer battle, even on a
+-- landscape device. Called from layout.updated (on resize/rotate) and
+-- from rival_trainer.updated (the instant a trainer battle starts/ends),
+-- replaying the last known rects so neither caller needs its own copy of
+-- this branching.
+function AppController:_applyPartyLayout(rects)
+    if not rects then return end
+    self._lastLayoutRects = rects
+
+    local showPartyTabs = rects.partyTabs ~= nil and self._hasRivalTrainer
+    local enteringLandscapeParty = showPartyTabs and not self._isLandscapeParty
+    self._isLandscapeParty = showPartyTabs
+
+    if showPartyTabs then
+        self.partyTabs:setLayout(rects.partyTabs)
+        self.partyPan:setLayout(rects.partyContent)
+        self.rivalPan:setLayout(rects.partyContent)
+        self.partyTabs:setActive(true)
+        if enteringLandscapeParty then
+            self:_applyPartyTab(self.partyTabs.activeIdx)
+        end
+    else
+        self.partyTabs:setActive(false)
+        self.partyPan:setLayout(rects.party)
+        self:_applyPartyTab(1)
+    end
+end
+
+-- Mirrors the right column's currentTabDrawers/tab.changed pattern, kept
+-- separate because the party column has its own Tabs instance and its
+-- own EventBus event ("party_tab.changed") so the two strips don't fight
+-- over "tab.changed". Called with idx=1 whenever the tab strip is hidden
+-- (portrait, or landscape with no rival battle -- see _applyPartyLayout),
+-- which is a no-op past the first call since rivalPan is never laid out
+-- or shown there.
+function AppController:_applyPartyTab(idx)
+    idx = idx or 1
+    if self.partyTabs.activeIdx ~= idx then
+        self.partyTabs.activeIdx = idx
+    end
+    self.currentPartyDrawers = (idx == 2) and { self.rivalPan } or { self.partyPan }
+    self.partyPan:setActive(idx == 1)
+    self.rivalPan:setActive(idx == 2)
 end
 
 -- =======================================================================

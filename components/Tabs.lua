@@ -13,6 +13,11 @@ function Tabs.new(locator, props)
     self.activeIdx = props.activeIdx or 1
     self.hitBoxes = {}
     self._modalBlocking = false
+    -- Two independent tab strips (party column, right column) share one
+    -- EventBus. `changeEvent` lets a second instance publish under its own
+    -- event name instead of colliding with "tab.changed"; omit it and this
+    -- behaves exactly as before.
+    self._changeEvent = props.changeEvent or "tab.changed"
     return self
 end
 
@@ -27,7 +32,7 @@ function Tabs:init()
             if x >= box.x and x <= box.x + box.w and y >= box.y and y <= box.y + box.h then
                 self2.activeIdx = box.idx
                 local bus = self2:_service("EventBus")
-                bus:publish("tab.changed", box.idx, self2.tabs[box.idx])
+                bus:publish(self2._changeEvent, box.idx, self2.tabs[box.idx])
                 return true
             end
         end
