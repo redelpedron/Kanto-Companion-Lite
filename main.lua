@@ -13,12 +13,12 @@ return function(mod)
         "services.SaveService", "services.SpriteService",
         "systems.BattleSystem", "systems.GameDataSystem", "systems.InputSystem",
         "systems.LayoutSystem", "systems.RenderSystem", "systems.UISystem",
-        "components.BadgeWidget", "components.CatchRate", "components.EnemyPanel",
+        "components.CatchRate", "components.EnemyPanel",
         "components.ExpBar", "components.ItemsPanel", "components.PCPopup",
-        "components.PokemonPanel", "components.RoutePanel", "components.StatusWidget",
+        "components.PokemonPanel", "components.RoutePanel",
         "components.Tabs", "components.TopBar", "components.TypeEffectiveness",
         "util.Colors", "util.DrawContext", "util.Helpers", "util.Math",
-        "util.TypeColors", "util.Viewport",
+        "util.ScrollableMixin", "util.TypeColors", "util.Viewport",
     }
 
     local modBase = (mod.path or ("mods/" .. mod.id)):gsub("/+$", "")
@@ -30,11 +30,11 @@ return function(mod)
             package.preload[name] = function()
                 local src, err = mod:read(relPath)
                 if not src then
-                    error(("voxel_hud: could not read '%s' (%s)"):format(relPath, tostring(err)), 0)
+                    error(("kanto_companion_lite: could not read '%s' (%s)"):format(relPath, tostring(err)), 0)
                 end
                 local chunk, loadErr = load(src, "@" .. modBase .. "/" .. relPath)
                 if not chunk then
-                    error(("voxel_hud: syntax error in '%s': %s"):format(relPath, loadErr), 0)
+                    error(("kanto_companion_lite: syntax error in '%s': %s"):format(relPath, loadErr), 0)
                 end
                 return chunk()
             end

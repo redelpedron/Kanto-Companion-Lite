@@ -30,7 +30,7 @@ return function(W, H, cfg)
         -- key with an absent value the way it could with an explicit
         -- false) -- exactly the "landscape party/top bar showing stale
         -- portrait content" bug this guards against.
-        topBar   = { x=x0, y=topY, w=usableW, h=topH, isPortrait=false },
+        topBar   = { x=x0, y=topY, w=usableW, h=topH, isPortrait=false, stackMode=false },
         party    = { x=x0, y=topY+topH, w=sideW, h=safeB-(topY+topH), isPortrait=false, compact=false },
         right    = right,
         -- Right column's own tab-strip/body split, so main.lua (or any

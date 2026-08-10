@@ -78,6 +78,8 @@ function AppController:_createCore()
     self.locator:register("LogService", log)
     self.bus:setLogger(log)
     self.sched:setLogger(log)
+    self.life:setLogger(log)
+    self.life:setLocator(self.locator)
 
     local ConfigService = require("services.ConfigService")
     self.locator:register("ConfigService", ConfigService.new(self.locator))
@@ -170,7 +172,6 @@ function AppController:_createUIComponents()
     local PCPopup      = require("components.PCPopup")
 
     self.topBar   = self.life:createComponent(TopBar, self.locator, {})
-    self.topBar2  = self.life:createComponent(TopBar, self.locator, {})  -- portrait stacked
     self.partyPan = self.life:createComponent(PokemonPanel, self.locator, {})
     self.enemyPan = self.life:createComponent(EnemyPanel, self.locator, { pokemonData={}, moveData={} })
     self.routePan = self.life:createComponent(RoutePanel, self.locator, { pokemonData={} })
@@ -184,7 +185,6 @@ end
 
 function AppController:_registerRenderables()
     self.renderSys:registerComponent(self.topBar)
-    self.renderSys:registerComponent(self.topBar2)
     self.renderSys:registerComponent(self.partyPan)
     self.renderSys:registerComponent(self.enemyPan)
     self.renderSys:registerComponent(self.routePan)
@@ -196,7 +196,6 @@ end
 
 function AppController:_wireUISystem()
     self.uiSys:registerComponent("topBar", self.topBar)
-    self.uiSys:registerComponent("topBar2", self.topBar2, true)  -- tabbed
     self.uiSys:registerComponent("party", self.partyPan)
     self.uiSys:registerComponent("enemy", self.enemyPan, true)
     self.uiSys:registerComponent("route", self.routePan, true)
@@ -213,15 +212,8 @@ function AppController:_subscribeEvents()
 
     -- Layout routing -----------------------------------------------------
     bus:subscribe("layout.updated", function(rects)
-        if rects.topBar1 and rects.topBar2 then
-            self.topBar:setLayout(rects.topBar1)
-            self.topBar2:setLayout(rects.topBar2)
-            self.topBar:setActive(true)
-            self.topBar2:setActive(true)
-        else
-            self.topBar:setLayout(rects.topBar)
-            self.topBar2:setActive(false)
-        end
+        -- New TopBar consolidation: single topBar with stackMode in portrait
+        self.topBar:setLayout(rects.topBar)
 
         self.partyPan:setLayout(rects.party)
 
@@ -354,13 +346,13 @@ function AppController:_wrapHooks()
     end)
 
     local ok, err = pcall(function()
-        self.mod.hooks:wrap("ui.start_menu.items", function(original, game)
-            local items = original(game)
-            table.insert(items, {
+        self.mod.hooks:wrap("ui.start_menu.items", function(next, game, items)
+            local out = next(game, items)
+            table.insert(out, {
                 label = saveSvc:isVisible() and "Hide Companion" or "Show Companion",
                 action = function() saveSvc:toggleVisible() end
             })
-            return items
+            return out
         end)
     end)
     if not ok then

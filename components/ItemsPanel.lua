@@ -1,25 +1,24 @@
 local Component = require("core.Component")
 local Colors    = require("util.Colors")
 local Helpers   = require("util.Helpers")
+local ScrollableMixin = require("util.ScrollableMixin")
 
 local ItemsPanel = setmetatable({}, { __index = Component })
 ItemsPanel.__index = ItemsPanel
 ItemsPanel.needs = { "ConfigService", "FontService", "GameService", "EventBus" }
+Helpers.mixin(ItemsPanel, ScrollableMixin)
 
 function ItemsPanel.new(locator, props)
     local self = setmetatable(Component.new(locator, props), ItemsPanel)
     self.inventory = {}
     self._modalBlocking = false
-    -- ADDED: Scroll state
-    self.scrollOffset = 0
-    self.scrollDragging = false
-    self.scrollDragStartY = 0
-    self.scrollDragStartOffset = 0
+    self:_scrollInit()
     return self
 end
 
 function ItemsPanel:init()
     self.bus = self._locator:resolve("EventBus")
+    self:_scrollListen()
     self:_listen("inventory.updated", function(_, inv) self.inventory = inv or {} end)
 
     self:_listen("modal.opened", function(self2) self2._modalBlocking = true end)
@@ -30,11 +29,9 @@ function ItemsPanel:init()
         self2:_handleClick(x, y, consume)
     end)
     
-    -- ADDED: Listen for mouse release to end scrollbar drag
+    -- Listen for mouse release to end scrollbar drag
     self:_listen("input.released", function(self2, x, y)
-        if self2.scrollDragging then
-            self2.scrollDragging = false
-        end
+        self2:_scrollEndDrag()
     end)
 end
 
@@ -53,21 +50,13 @@ function ItemsPanel:_handleClick(x, y, consume)
         return true
     end
     
-    -- ADDED: Handle scrollbar drag (hit zone: ±8px around scrollbar)
-    local scrollbarX = px + pw - 10  -- Center of scrollbar within right margin
-    local scrollbarY = py + 24
-    local scrollbarW = 4
+    -- Scrollbar drag hit zone
     local viewportHeight = ph - 28
-    
-    if x >= scrollbarX - 6 and x <= scrollbarX + scrollbarW + 6 and
-       y >= scrollbarY and y <= scrollbarY + viewportHeight then
-        self.scrollDragging = true
-        self.scrollDragStartY = y
-        self.scrollDragStartOffset = self.scrollOffset
+    if self:_scrollTryStartDrag(x, y, { x = px, y = py + 24, w = pw, h = viewportHeight }) then
         if consume then consume() end
         return true
     end
-    
+
     return false
 end
 
@@ -93,13 +82,8 @@ function ItemsPanel:_categorize(dItem)
     return balls, heals, other
 end
 
--- ADDED: Handle continuous scroll drag
 function ItemsPanel:update(dt)
-    if self.scrollDragging then
-        local currentY = love.mouse.getY()
-        local dy = currentY - self.scrollDragStartY
-        self.scrollOffset = math.max(0, self.scrollDragStartOffset + dy)
-    end
+    self:_scrollUpdateDrag()
 end
 
 function ItemsPanel:draw(ctx)
@@ -193,8 +177,7 @@ function ItemsPanel:draw(ctx)
     end
     
     -- Clamp scroll to valid range
-    local maxScroll = math.max(0, contentHeight - viewportHeight)
-    self.scrollOffset = math.max(0, math.min(maxScroll, self.scrollOffset))
+    local scrollOffset, maxScroll = self:_scrollClamp(contentHeight, viewportHeight)
 
     -- Apply scissor to clip overflowing content
     love.graphics.setScissor(
@@ -204,8 +187,7 @@ function ItemsPanel:draw(ctx)
         math.ceil(viewportHeight)
     )
 
-    -- MODIFIED: cy now includes scroll offset
-    local cy = y + 24 - self.scrollOffset
+    local cy = y + 24 - scrollOffset
     local maxCy = y + drawH - 4
 
     local function drawSec(title, rows)
@@ -237,30 +219,12 @@ function ItemsPanel:draw(ctx)
     -- Clear scissor
     love.graphics.setScissor()
 
-    -- ADDED: Draw scrollbar if content exceeds viewport
-    if maxScroll > 0 then
-        local scrollbarX = x + w - 10  -- Centered in the hit zone
-        local scrollbarW = 4
-        local scrollbarY = y + 24
-        local scrollbarH = viewportHeight
-        
-        -- Scrollbar track (background)
-        Colors.set(cfg.COL.border, 0.1)
-        love.graphics.rectangle("fill", math.floor(scrollbarX), math.floor(scrollbarY), 
-                                scrollbarW, math.floor(scrollbarH))
-        
-        -- Thumb height proportional to content vs viewport
-        local thumbHeight = math.max(20, scrollbarH * (viewportHeight / contentHeight))
-        
-        -- Thumb position based on scroll offset
-        local thumbY = scrollbarY + (self.scrollOffset / maxScroll) * (scrollbarH - thumbHeight)
-        
-        -- Thumb appearance (highlight if dragging)
-        local isDragging = self.scrollDragging
-        Colors.set(isDragging and cfg.COL.gold or cfg.COL.hi, isDragging and 0.9 or 0.7)
-        love.graphics.rectangle("fill", math.floor(scrollbarX), math.floor(thumbY), 
-                                scrollbarW, math.floor(thumbHeight))
-    end
+    self:_scrollDrawBar(
+        { x = x, y = y + 24, w = w, h = viewportHeight },
+        contentHeight, viewportHeight, maxScroll, scrollOffset,
+        { track = cfg.COL.border, thumb = cfg.COL.hi, thumbActive = cfg.COL.gold },
+        Colors
+    )
 end
 
 return ItemsPanel

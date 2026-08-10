@@ -42,8 +42,6 @@ return function(W, H, cfg)
     return {
         isPortrait = true,
         topBar   = { x=x0, y=topY, w=usableW, h=totalTopH, isPortrait=true, stackMode=true },
-        topBar1  = { x=x0, y=topY, w=usableW, h=rowH, isPortrait=true, section="player" },
-        topBar2  = { x=x0, y=topY+rowH, w=usableW, h=rowH, isPortrait=true, section="collection" },
         -- Tab strip
         rightTabs    = { x=x0, y=tabsY, w=usableW, h=tabsH },
         -- Encounter/Items/Battle panel (max 5 entries visible)

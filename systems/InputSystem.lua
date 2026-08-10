@@ -15,6 +15,10 @@ function InputSystem.new(locator)
     self._wrappedTouchRelease = nil
     self._wrappedMouse = nil
     self._wrappedMouseRelease = nil
+    self._origTouchMove = nil
+    self._origMouseMove = nil
+    self._wrappedTouchMove = nil
+    self._wrappedMouseMove = nil
     self._wrapped = false
     return self
 end
@@ -70,6 +74,31 @@ function InputSystem:init()
         end
         love.mousereleased = self._wrappedMouseRelease
     end
+
+    -- Continuous drag position, for scrollbars and anything else that
+    -- needs "current pointer position" rather than a press/release edge.
+    -- Fires on both touch and mouse so drag-to-scroll works on Android
+    -- (touchmoved) as well as desktop LOVE2D testing (mousemoved).
+    if love.touchmoved then
+        self._origTouchMove = love.touchmoved
+        self._wrappedTouchMove = function(id, x, y, dx, dy, pressure)
+            self.bus:publish("input.moved", x, y)
+            if self._origTouchMove then return self._origTouchMove(id, x, y, dx, dy, pressure) end
+        end
+        love.touchmoved = self._wrappedTouchMove
+    end
+
+    if love.mousemoved then
+        self._origMouseMove = love.mousemoved
+        self._wrappedMouseMove = function(x, y, dx, dy, istouch)
+            if not istouch then
+                self.bus:publish("input.moved", x, y)
+            end
+            if self._origMouseMove then return self._origMouseMove(x, y, dx, dy, istouch) end
+        end
+        love.mousemoved = self._wrappedMouseMove
+    end
+
     self._wrapped = true
 end
 
@@ -88,6 +117,12 @@ function InputSystem:destroy()
     end
     if self._wrappedMouseRelease and love.mousereleased == self._wrappedMouseRelease then
         love.mousereleased = self._origMouseRelease
+    end
+    if self._wrappedTouchMove and love.touchmoved == self._wrappedTouchMove then
+        love.touchmoved = self._origTouchMove
+    end
+    if self._wrappedMouseMove and love.mousemoved == self._wrappedMouseMove then
+        love.mousemoved = self._origMouseMove
     end
     self._wrapped = false
 end

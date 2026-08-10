@@ -1,4 +1,3 @@
-
 --- TypeColors: type-name normalization and color lookup.
 local TypeColors = {}
 
@@ -13,14 +12,32 @@ local TYPE = {
     DRAGON = {0.5,0.35,0.85},
 }
 
+-- Reuse the fallback color table instead of allocating one on every lookup.
+local DEFAULT_COLOR = {0.55, 0.55, 0.6}
+
+-- Type names are repeated heavily during rendering. Cache normalized values
+-- for known types so repeated lookups avoid gsub/upper/match allocations.
+local NORMALIZED_CACHE = {}
+
 function TypeColors.normalize(t)
     if type(t) ~= "string" then return "" end
-    t = t:gsub("_TYPES?$", ""):upper():match("^%s*(.-)%s*$")
-    return t
+
+    local cached = NORMALIZED_CACHE[t]
+    if cached then return cached end
+
+    local normalized = t:gsub("_TYPES?$", ""):upper():match("^%s*(.-)%s*$")
+
+    -- Only cache recognized type names; this keeps the cache bounded to the
+    -- finite set of types used by the game.
+    if TYPE[normalized] then
+        NORMALIZED_CACHE[t] = normalized
+    end
+
+    return normalized
 end
 
 function TypeColors.getColor(typeName)
-    return TYPE[TypeColors.normalize(typeName)] or {0.55, 0.55, 0.6}
+    return TYPE[TypeColors.normalize(typeName)] or DEFAULT_COLOR
 end
 
 return TypeColors

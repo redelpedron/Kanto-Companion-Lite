@@ -5,6 +5,21 @@ local Colors = require("util.Colors")
 local Helpers = {}
 
 -- ---------------------------------------------------------------------
+-- Mixin composition: copy every function from `mixin` onto `class` without
+-- disturbing `class`'s own `__index`/metatable chain to Component. Used to
+-- attach ScrollableMixin to components that already inherit from Component.
+-- ---------------------------------------------------------------------
+
+function Helpers.mixin(class, mixinTable)
+    for k, v in pairs(mixinTable) do
+        if type(v) == "function" then
+            class[k] = v
+        end
+    end
+    return class
+end
+
+-- ---------------------------------------------------------------------
 -- Safe-area (notch / punch-hole front camera / gesture-bar) support.
 -- Pure engine query, same category as util.Colors already touching
 -- love.graphics -- not a "game.save" architecture leak.

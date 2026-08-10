@@ -128,8 +128,17 @@ end
 function GameService:isMenuOpen()
     local stk = self:getStack()
     if not (stk and stk.states and #stk.states > 0) then return false end
+
     local top = stk.states[#stk.states]
-    return type(top) == "table" and top.items ~= nil and top.index ~= nil
+    if type(top) ~= "table" then return false end
+
+    if top._isMenuOpen ~= nil then
+        return top._isMenuOpen
+    end
+
+    local isMenuOpen = top.items ~= nil and top.index ~= nil
+    top._isMenuOpen = isMenuOpen
+    return isMenuOpen
 end
 
 function GameService:getCurrentMapId()
@@ -150,6 +159,10 @@ end
 
 function GameService:getBattleStateClass()
     return Helpers.safeRequire("src.battle.BattleState")
+end
+
+function GameService:getTypeChart()
+    return Helpers.safeRequire("src.battle.TypeChart")
 end
 
 return GameService

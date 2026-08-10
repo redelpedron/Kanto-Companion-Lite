@@ -281,30 +281,65 @@ local function drawPortrait(self, cfg, fonts, ctx)
     local W      = ctx.w
     local topY   = ctx.y or 0
     local h      = ctx.h or cfg.TOP_BAR_ROW_H
+    local stackMode = ctx.stackMode or false
     local section = ctx.section or "player"
     local bg     = cfg.COL.panelTop
 
-    Colors.set(bg, 0.95)
-    love.graphics.rectangle("fill", 0, math.floor(topY), math.floor(W), math.floor(h), 0, 0)
-    love.graphics.setLineWidth(1)
-    Colors.set(cfg.COL.border, 0.55)
-    love.graphics.line(0, topY, W, topY)
-    Colors.set(cfg.COL.border, 0.4)
-    love.graphics.line(0, topY + h, W, topY + h)
+    if stackMode then
+        -- Portrait stacked mode: render both rows in one component with divider
+        local rowH = h / 2
+        local t = self.trainer
+        local f = fonts:getFont(cfg.TOPBAR_FONT_SZ)
+        love.graphics.setFont(f)
+        
+        local padX = cfg.TOPBAR_PAD_X
+        local rowW = W - padX * 2
 
-    local t = self.trainer
-    local f = fonts:getFont(cfg.TOPBAR_FONT_SZ)
-    love.graphics.setFont(f)
+        -- Row 1: Player info
+        Colors.set(bg, 0.95)
+        love.graphics.rectangle("fill", 0, math.floor(topY), math.floor(W), math.floor(rowH), 0, 0)
+        love.graphics.setLineWidth(1)
+        Colors.set(cfg.COL.border, 0.55)
+        love.graphics.line(0, topY, W, topY)
+        Colors.set(cfg.COL.border, 0.4)
+        love.graphics.line(0, topY + rowH, W, topY + rowH)
+        
+        local cy1 = topY + rowH / 2
+        drawEvenlySpaced(f, cfg, profileChips(cfg, t, self.repel), padX, rowW, cy1, bg)
 
-    local padX = cfg.TOPBAR_PAD_X
-    local cy   = topY + h / 2
-    local rowW = W - padX * 2
-
-    if section == "player" then
-        drawEvenlySpaced(f, cfg, profileChips(cfg, t, self.repel), padX, rowW, cy, bg)
-    else
-        drawAligned(f, cfg, padX, rowW, cy, bg,
+        -- Row 2: Collection/status info
+        Colors.set(bg, 0.95)
+        love.graphics.rectangle("fill", 0, math.floor(topY + rowH), math.floor(W), math.floor(rowH), 0, 0)
+        Colors.set(cfg.COL.border, 0.4)
+        love.graphics.line(0, topY + h, W, topY + h)
+        
+        local cy2 = topY + rowH + rowH / 2
+        drawAligned(f, cfg, padX, rowW, cy2, bg,
             statusLeftChips(cfg, t), nil, statusRightChips(cfg))
+    else
+        -- Single row mode: render just one section
+        Colors.set(bg, 0.95)
+        love.graphics.rectangle("fill", 0, math.floor(topY), math.floor(W), math.floor(h), 0, 0)
+        love.graphics.setLineWidth(1)
+        Colors.set(cfg.COL.border, 0.55)
+        love.graphics.line(0, topY, W, topY)
+        Colors.set(cfg.COL.border, 0.4)
+        love.graphics.line(0, topY + h, W, topY + h)
+
+        local t = self.trainer
+        local f = fonts:getFont(cfg.TOPBAR_FONT_SZ)
+        love.graphics.setFont(f)
+
+        local padX = cfg.TOPBAR_PAD_X
+        local cy   = topY + h / 2
+        local rowW = W - padX * 2
+
+        if section == "player" then
+            drawEvenlySpaced(f, cfg, profileChips(cfg, t, self.repel), padX, rowW, cy, bg)
+        else
+            drawAligned(f, cfg, padX, rowW, cy, bg,
+                statusLeftChips(cfg, t), nil, statusRightChips(cfg))
+        end
     end
 end
 

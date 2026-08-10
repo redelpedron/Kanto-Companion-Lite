@@ -50,4 +50,14 @@ function ServiceLocator:unregister(name)
     self._cache[name] = nil
 end
 
+--- Invalidate a cached service. Next resolve() will re-create it (for factories).
+function ServiceLocator:invalidate(name)
+    self._cache[name] = nil
+end
+
+--- Invalidate all cached services. Useful on game reset.
+function ServiceLocator:invalidateAll()
+    self._cache = {}
+end
+
 return ServiceLocator

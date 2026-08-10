@@ -8,6 +8,7 @@ function Scheduler.new()
     local self = setmetatable({}, Scheduler)
     self._tasks = {}
     self._acc = 0
+    self._updateCount = 0
     return self
 end
 
@@ -27,6 +28,8 @@ end
 --- Tick all tasks with dt.
 function Scheduler:update(dt)
     self._acc = self._acc + dt
+    self._updateCount = self._updateCount + 1
+    
     for _, task in ipairs(self._tasks) do
         if task.active then
             task.acc = task.acc + dt
@@ -37,6 +40,19 @@ function Scheduler:update(dt)
                     self._log:error("Scheduler: %s", tostring(err))
                 end
             end
+        end
+    end
+    
+    -- Compact dead tasks: every 100 updates or when list exceeds 300 tasks
+    if self._updateCount % 100 == 0 or #self._tasks > 300 then
+        local live = {}
+        for _, task in ipairs(self._tasks) do
+            if task.active then
+                table.insert(live, task)
+            end
+        end
+        if #live < #self._tasks then
+            self._tasks = live
         end
     end
 end

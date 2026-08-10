@@ -1,14 +1,18 @@
 {
   "id": "kanto_companion_lite",
   "name": "Kanto Companion Lite",
-  "version": "2.0.9",
+  "version": "2.1.0",
   "entry": "main.lua",
   "api": 2,
-  "conflicts": ["kanto_companion"],
+  "conflicts": [
+    "kanto_companion"
+  ],
   "profile": "content",
   "category": "QOL",
   "affects_link": false,
   "github": "redelpedron/Kanto-Companion-Lite",
-  "permissions": ["engine_internals"],
+  "permissions": [
+    "engine_internals"
+  ],
   "description": "An Android-focused in-game companion inspired by Kanto Companion, featuring a touch-first interface designed for mobile play. Provides companion information and gameplay utilities directly within the game without relying on keyboard or mouse controls. Fan-made and not affiliated with or endorsed by Nintendo, Game Freak, or The Pokémon Company."
 }

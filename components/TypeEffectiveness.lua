@@ -24,7 +24,7 @@ end
 function TypeEffectiveness:_ensureTypeChart()
     if self._typeChartReady then return true end
     local gameService = self:_service("GameService")
-    local tc = Helpers.safeRequire("src.battle.TypeChart")
+    local tc = gameService:getTypeChart()  -- Go through GameService abstraction
     if not tc then return false end
     self._typeChart = tc
     local data = gameService:getData()

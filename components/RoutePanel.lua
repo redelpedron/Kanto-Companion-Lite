@@ -1,24 +1,23 @@
 local Component = require("core.Component")
 local Colors    = require("util.Colors")
 local Helpers   = require("util.Helpers")
+local ScrollableMixin = require("util.ScrollableMixin")
 
 local RoutePanel = setmetatable({}, { __index = Component })
 RoutePanel.__index = RoutePanel
 RoutePanel.needs = { "ConfigService", "FontService", "SpriteService", "EventBus" }
+Helpers.mixin(RoutePanel, ScrollableMixin)
 
 function RoutePanel.new(locator, props)
     local self = setmetatable(Component.new(locator, props), RoutePanel)
     self.route = nil
-    -- v1.0.65: scroll state for encounter lists
-    self.scrollOffset = 0
-    self.scrollDragging = false
-    self.scrollDragStartY = 0
-    self.scrollDragStartOffset = 0
+    self:_scrollInit()
     return self
 end
 
 function RoutePanel:init()
     self.bus = self._locator:resolve("EventBus")
+    self:_scrollListen()
     self:_listen("route.updated", function(_, route) self.route = route end)
 
     -- v1.0.65: input handling for scrollbar drag
@@ -27,9 +26,7 @@ function RoutePanel:init()
         self2:_handleClick(x, y, consume)
     end)
     self:_listen("input.released", function(self2, x, y)
-        if self2.scrollDragging then
-            self2.scrollDragging = false
-        end
+        self2:_scrollEndDrag()
     end)
 end
 
@@ -96,15 +93,8 @@ function RoutePanel:_handleClick(x, y, consume)
     local px, py, pw, ph = self._props.x, self._props.y, self._props.w, self._props.h
 
     -- Hit zone: scrollbar track area
-    local scrollbarX = px + pw - 10
-    local scrollbarY = py + 8
     local viewportHeight = ph - 12
-
-    if x >= scrollbarX - 6 and x <= scrollbarX + 10 and
-       y >= scrollbarY and y <= scrollbarY + viewportHeight then
-        self.scrollDragging = true
-        self.scrollDragStartY = y
-        self.scrollDragStartOffset = self.scrollOffset
+    if self:_scrollTryStartDrag(x, y, { x = px, y = py + 8, w = pw, h = viewportHeight }) then
         if consume then consume() end
         return true
     end
@@ -112,11 +102,7 @@ function RoutePanel:_handleClick(x, y, consume)
 end
 
 function RoutePanel:update(dt)
-    if self.scrollDragging then
-        local currentY = love.mouse.getY()
-        local dy = currentY - self.scrollDragStartY
-        self.scrollOffset = math.max(0, self.scrollDragStartOffset + dy)
-    end
+    self:_scrollUpdateDrag()
 end
 
 function RoutePanel:draw(ctx)
@@ -148,8 +134,7 @@ function RoutePanel:draw(ctx)
     -- Scroll metrics
     local contentHeight = self:_contentHeight()
     local viewportHeight = drawH - 12
-    local maxScroll = math.max(0, contentHeight - viewportHeight)
-    self.scrollOffset = math.max(0, math.min(maxScroll, self.scrollOffset))
+    local scrollOffset, maxScroll = self:_scrollClamp(contentHeight, viewportHeight)
 
     -- Apply scissor
     love.graphics.setScissor(
@@ -159,7 +144,7 @@ function RoutePanel:draw(ctx)
         math.ceil(viewportHeight)
     )
 
-    local cy = y + 8 - self.scrollOffset
+    local cy = y + 8 - scrollOffset
     local maxCy = y + drawH - 4
 
     local function drawSec(title, tab)
@@ -217,23 +202,12 @@ function RoutePanel:draw(ctx)
     -- Clear scissor
     love.graphics.setScissor()
 
-    -- v1.0.65: draw scrollbar if content exceeds viewport
-    if maxScroll > 0 then
-        local scrollbarX = x + w - 10
-        local scrollbarW = 4
-        local scrollbarY = y + 8
-        local scrollbarH = viewportHeight
-
-        Colors.set(cfg.COL.border, 0.1)
-        love.graphics.rectangle("fill", math.floor(scrollbarX), math.floor(scrollbarY), scrollbarW, math.floor(scrollbarH))
-
-        local thumbHeight = math.max(20, scrollbarH * (viewportHeight / contentHeight))
-        local thumbY = scrollbarY + (self.scrollOffset / maxScroll) * (scrollbarH - thumbHeight)
-
-        local isDragging = self.scrollDragging
-        Colors.set(isDragging and cfg.COL.gold or cfg.COL.hi, isDragging and 0.9 or 0.7)
-        love.graphics.rectangle("fill", math.floor(scrollbarX), math.floor(thumbY), scrollbarW, math.floor(thumbHeight))
-    end
+    self:_scrollDrawBar(
+        { x = x, y = y + 8, w = w, h = viewportHeight },
+        contentHeight, viewportHeight, maxScroll, scrollOffset,
+        { track = cfg.COL.border, thumb = cfg.COL.hi, thumbActive = cfg.COL.gold },
+        Colors
+    )
 end
 
 return RoutePanel

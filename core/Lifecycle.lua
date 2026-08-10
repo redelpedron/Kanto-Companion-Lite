@@ -8,11 +8,37 @@ function Lifecycle.new()
     local self = setmetatable({}, Lifecycle)
     self._components = {}
     self._systems = {}
+    self._locator = nil
+    self._log = nil
     return self
+end
+
+--- Store reference to locator for `needs` validation.
+function Lifecycle:setLocator(locator)
+    self._locator = locator
+end
+
+--- Store reference to logger for diagnostics.
+function Lifecycle:setLogger(log)
+    self._log = log
 end
 
 --- Create and init a component. Returns the instance.
 function Lifecycle:createComponent(Class, locator, props)
+    -- Validate `needs` if Class declares required services
+    if Class.needs and self._locator then
+        for _, serviceName in ipairs(Class.needs) do
+            if not self._locator:has(serviceName) then
+                local msg = ("Component %s requires '%s' but it is not registered"):format(
+                    Class.__name or "unknown", serviceName)
+                if self._log then
+                    self._log:error(msg)
+                end
+                error(msg, 2)
+            end
+        end
+    end
+    
     local instance = Class.new(locator, props)
     table.insert(self._components, instance)
     instance:_doInit()

@@ -15,10 +15,12 @@ local Colors    = require("util.Colors")
 local Helpers   = require("util.Helpers")
 local Viewport  = require("util.Viewport")
 local TypeColors = require("util.TypeColors")
+local ScrollableMixin = require("util.ScrollableMixin")
 
 local PCPopup = setmetatable({}, { __index = Component })
 PCPopup.__index = PCPopup
 PCPopup.needs = { "ConfigService", "FontService", "GameService", "PCService", "SpriteService", "EventBus" }
+Helpers.mixin(PCPopup, ScrollableMixin)
 
 function PCPopup.new(locator, props)
     local self = setmetatable(Component.new(locator, props), PCPopup)
@@ -29,17 +31,15 @@ function PCPopup.new(locator, props)
     self.status   = nil
     self.statusAt = 0
     self._hit     = {}
-    -- ADDED: Scroll state for item panels (bag and pc side-by-side)
-    self.scrollOffset = { bag = 0, pc = 0 }
-    self.scrollDragging = false
-    self.scrollDragSide = nil
-    self.scrollDragStartY = 0
-    self.scrollDragStartOffset = 0
+    -- Scroll state for item panels (bag and pc side-by-side), keyed
+    -- by side so one mixin instance drives both independently.
+    self:_scrollInit()
     return self
 end
 
 function PCPopup:init()
     self.bus = self._locator:resolve("EventBus")
+    self:_scrollListen()
 
     self:_listen("pc.open", function(self2) self2:openPopup() end)
     self:_listen("battle.started", function(self2) self2:closePopup() end)
@@ -55,11 +55,11 @@ function PCPopup:init()
         self2:_handleClick(x, y)
     end)
     
-    -- BUGFIX: Listen for mouse release to stop scrollbar drag
+    -- Listen for mouse/touch release to stop scrollbar drag
     self:_listen("input.released", function(self2, x, y, consume)
         if not self2:isActive() then return end
-        if self2.scrollDragging then
-            self2.scrollDragging = false
+        if self2._scrollDragging then
+            self2:_scrollEndDrag()
             if consume then consume() end
         end
     end)
@@ -69,14 +69,8 @@ function PCPopup:update(dt)
     if not self:isActive() then return end
     local game = self:_service("GameService")
     if not game:isInGame() then self:closePopup() end
-    
-    -- ADDED: Handle scrollbar drag
-    if self.scrollDragging and self.scrollDragSide then
-        local currentY = love.mouse.getY()
-        local dy = currentY - self.scrollDragStartY
-        local side = self.scrollDragSide
-        self.scrollOffset[side] = math.max(0, self.scrollDragStartOffset + dy)
-    end
+
+    self:_scrollUpdateDrag()
 end
 
 -- ======================================================================
@@ -104,9 +98,8 @@ function PCPopup:closePopup()
     pc:closeModal()
     self.heldItem, self.heldMon = nil, nil
     self._hit = {}
-    -- ADDED: Reset scroll state
-    self.scrollOffset = { bag = 0, pc = 0 }
-    self.scrollDragging = false
+    -- Reset scroll state
+    self:_scrollReset()
     self:setActive(false)
     self.bus:publish("modal.closed")
 end
@@ -147,24 +140,12 @@ function PCPopup:_handleClick(x, y)
         local L = self:_computeLayout(love.graphics.getDimensions())
         local bx, by, bw, bh = L.wx + 10, L.bodyY, L.ww - 20, L.bodyH
         local p1, p2 = self:_splitPanels(bx, by, bw, bh, L.portrait)
-        
-        -- Check bag scrollbar (left panel)
-        if x >= p1.x + p1.w - 16 and x <= p1.x + p1.w and
-           y >= p1.y + 28 and y <= p1.y + p1.h then
-            self.scrollDragging = true
-            self.scrollDragSide = "bag"
-            self.scrollDragStartY = y
-            self.scrollDragStartOffset = self.scrollOffset.bag or 0
+
+        -- Check bag scrollbar (left panel), then PC scrollbar (right panel)
+        if self:_scrollTryStartDrag(x, y, { x = p1.x, y = p1.y + 28, w = p1.w, h = p1.h }, "bag") then
             return
         end
-        
-        -- Check PC scrollbar (right panel)
-        if x >= p2.x + p2.w - 16 and x <= p2.x + p2.w and
-           y >= p2.y + 28 and y <= p2.y + p2.h then
-            self.scrollDragging = true
-            self.scrollDragSide = "pc"
-            self.scrollDragStartY = y
-            self.scrollDragStartOffset = self.scrollOffset.pc or 0
+        if self:_scrollTryStartDrag(x, y, { x = p2.x, y = p2.y + 28, w = p2.w, h = p2.h }, "pc") then
             return
         end
     end
@@ -474,11 +455,9 @@ function PCPopup:_drawItemList(p, cfg, fonts, dItem, side, title, itemsTable, sl
     end
     
     local viewportHeight = p.h - 32  -- Available space for scrolling (bottom margin)
-    local maxScroll = math.max(0, contentHeight - viewportHeight)
-    self.scrollOffset[side] = math.max(0, math.min(maxScroll, self.scrollOffset[side] or 0))
-    local scroll = self.scrollOffset[side]
+    local scroll, maxScroll = self:_scrollClamp(contentHeight, viewportHeight, side)
 
-    local cy = p.y + 30 - scroll  -- MODIFIED: Apply scroll offset
+    local cy = p.y + 30 - scroll
     local maxCy = p.y + p.h - 4
     -- Single source of truth for "what's actually visible": the same
     -- rect clips drawing (below) and gates itemrow hit-tests (in
@@ -521,28 +500,12 @@ function PCPopup:_drawItemList(p, cfg, fonts, dItem, side, title, itemsTable, sl
 
     love.graphics.setScissor()
 
-    -- ADDED: Draw scrollbar if content exceeds viewport
-    if maxScroll > 0 then
-        local scrollbarX = p.x + p.w - 10  -- Position in the ±8px hit zone
-        local scrollbarW = 4
-        local scrollbarY = p.y + 28
-        local scrollbarH = viewportHeight
-        
-        -- Scrollbar track
-        Colors.set(cfg.COL.border, 0.1)
-        love.graphics.rectangle("fill", math.floor(scrollbarX), math.floor(scrollbarY), scrollbarW, math.floor(scrollbarH))
-        
-        -- Thumb height proportional to content
-        local thumbHeight = math.max(20, scrollbarH * (viewportHeight / contentHeight))
-        
-        -- Thumb position
-        local thumbY = scrollbarY + (scroll / maxScroll) * (scrollbarH - thumbHeight)
-        
-        -- Thumb appearance (highlight if dragging this side)
-        local isDragging = self.scrollDragging and self.scrollDragSide == side
-        Colors.set(isDragging and cfg.COL.gold or cfg.COL.hi, isDragging and 0.9 or 0.7)
-        love.graphics.rectangle("fill", math.floor(scrollbarX), math.floor(thumbY), scrollbarW, math.floor(thumbHeight))
-    end
+    self:_scrollDrawBar(
+        { x = p.x, y = p.y + 28, w = p.w, h = viewportHeight },
+        contentHeight, viewportHeight, maxScroll, scroll,
+        { track = cfg.COL.border, thumb = cfg.COL.hi, thumbActive = cfg.COL.gold },
+        Colors, side
+    )
 end
 
 -- ---- Boxes tab ----------------------------------------------------
