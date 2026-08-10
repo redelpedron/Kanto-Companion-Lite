@@ -11,6 +11,13 @@ function GameDataSystem.new(locator)
     self.bus = locator:resolve("EventBus")
     self._acc = 0
     self._interval = 0.2 -- throttled: full snapshot + bus publish is too heavy for every frame
+    -- v2.1.38: last known hp/maxhp/status per rival roster slot, keyed by
+    -- index. Once a mon has been sent out at least once we've genuinely
+    -- seen its stats -- including 0 HP if it fainted -- so that should
+    -- stick even after it's benched again (see rival[i] below). Cleared
+    -- whenever we're not in a trainer battle so a new trainer's roster
+    -- never inherits a previous battle's reveals.
+    self._rivalKnown = {}
     return self
 end
 
@@ -102,18 +109,42 @@ function GameDataSystem:tick()
             local isActive = enemyActiveMon ~= nil
                 and mon.species == enemyActiveMon.species
                 and mon.level == enemyActiveMon.level
+
+            local hp, maxhp, status
+            if isActive then
+                hp     = enemyActiveMon.hp
+                maxhp  = enemyActiveMon.stats and enemyActiveMon.stats.hp
+                status = enemyActiveMon.status
+                -- v2.1.38: remember what we just saw for this slot, so it
+                -- doesn't fall back to "unknown" once the mon is benched
+                -- again -- most importantly when it's benched *because it
+                -- just fainted*, which used to redraw as "?" instead of
+                -- staying at 0/maxhp.
+                self._rivalKnown[i] = { hp = hp, maxhp = maxhp, status = status }
+            else
+                local known = self._rivalKnown[i]
+                hp     = known and known.hp
+                maxhp  = known and known.maxhp
+                status = known and known.status
+            end
+
             rival[i] = {
                 name = def and def.name or tostring(mon.species),
                 species = mon.species,
                 level = mon.level or 0,
-                hp = isActive and enemyActiveMon.hp or nil,
-                maxhp = isActive and enemyActiveMon.stats and enemyActiveMon.stats.hp or nil,
-                status = isActive and enemyActiveMon.status or nil,
+                hp = hp,
+                maxhp = maxhp,
+                status = status,
                 types = def and def.types or {},
                 active = isActive,
                 pokemonData = dPoke,
             }
         end
+    else
+        -- Not (or no longer) in a trainer battle -- drop any reveals so
+        -- the next trainer's roster starts fresh instead of inheriting
+        -- stale hp/maxhp from whoever we last fought.
+        self._rivalKnown = {}
     end
     self.bus:publish("rival.updated", rival)
 

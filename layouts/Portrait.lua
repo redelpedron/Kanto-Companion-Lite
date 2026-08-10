@@ -47,6 +47,9 @@ return function(W, H, cfg)
         -- Encounter/Items/Battle panel (max 5 entries visible)
         rightContent = { x=x0, y=encY, w=usableW, h=encH },
         -- Party anchored to bottom of encounter window
-        party    = { x=x0, y=partyY, w=usableW, h=partyH_actual, isPortrait=true, compact=true },
+        -- showTabHeader=false (explicit): Portrait has no party tab
+        -- strip at all, so this panel's own internal "Party" label is
+        -- the only place that text appears here.
+        party    = { x=x0, y=partyY, w=usableW, h=partyH_actual, isPortrait=true, compact=true, showTabHeader=false },
     }
 end

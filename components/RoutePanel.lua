@@ -177,7 +177,15 @@ function RoutePanel:draw(ctx)
             local f11 = fonts:getFont(11)
             love.graphics.setFont(f11)
             Colors.set(cfg.COL.text, 1)
-            love.graphics.print(sp.name, math.floor(x+32), math.floor(cy))
+            -- v2.1.38: every other name-printing site (PokemonPanel,
+            -- EnemyPanel, PCPopup) runs species names through
+            -- sanitizeName first so the ♀/♂ glyphs -- absent from LÖVE's
+            -- default font -- get swapped for "(F)"/"(M)" instead of
+            -- rendering as a missing-glyph box. This was the one spot
+            -- that printed the raw name, so gender-locked species with a
+            -- symbol in their name (e.g. Nidorino/Nidorina) showed a
+            -- blank/garbled glyph here instead of the gender tag.
+            love.graphics.print(Helpers.sanitizeName(sp.name), math.floor(x+32), math.floor(cy))
             local lv
             if sp.minLevel == sp.maxLevel then
                 lv = "Lv" .. sp.minLevel

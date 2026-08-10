@@ -246,7 +246,15 @@ function PokemonPanel:draw(ctx)
     local f14 = fonts:getFont(14)
     dc:setFont(f14)
     dc:setColor(cfg.COL.text, 1)
-    dc:print(self._props.label or "Party", x+8, y+4)
+    -- v2.1.40: skip this label whenever the landscape partyTabs strip
+    -- above is already showing the same "Party"/trainer-name text as a
+    -- tab (see layouts/Landscape.lua's showTabHeader) -- redrawing it
+    -- here too was a plain duplicate. Still drawn in portrait, and in
+    -- landscape's untabbed fallback (no active trainer battle), where
+    -- this is the only place that label appears.
+    if not self._props.showTabHeader then
+        dc:print(self._props.label or "Party", x+8, y+4)
+    end
 
     if ctx.compact then
         self:_drawCompactStrip(cfg, fonts, sprites, dc, x, y, w, h)

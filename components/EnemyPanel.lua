@@ -42,17 +42,22 @@ function EnemyPanel:_contentHeight(w)
         h = h + 14
     end
     h = h + 4
-    h = h + 14
-    local balls = { "POKE_BALL", "GREAT_BALL", "ULTRA_BALL", "MASTER_BALL" }
-    local hasAny = false
-    for _, ballId in ipairs(balls) do
-        if (self.inventory[ballId] or 0) > 0 then
-            hasAny = true
+    h = h + 14 -- catch-rate section header row ("CATCH RATE" or "Can't be caught")
+    if not self.trainerName then
+        -- Trainer's mons can never be caught (Gen 1 rule), so in a
+        -- trainer battle we only ever draw the one header-row note above
+        -- and skip the ball-by-ball odds list entirely.
+        local balls = { "POKE_BALL", "GREAT_BALL", "ULTRA_BALL", "MASTER_BALL" }
+        local hasAny = false
+        for _, ballId in ipairs(balls) do
+            if (self.inventory[ballId] or 0) > 0 then
+                hasAny = true
+                h = h + 14
+            end
+        end
+        if not hasAny then
             h = h + 14
         end
-    end
-    if not hasAny then
-        h = h + 14
     end
     h = h + 8
     return h
@@ -219,6 +224,17 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
 
     love.graphics.setFont(f10)
     Colors.set(cfg.COL.dim, 1)
+
+    -- v2.1.38: trainer mons can never be caught (Gen 1 rule) -- showing
+    -- catch odds for them is meaningless at best, misleading at worst.
+    -- Swap the whole section for a one-line note instead of the ball
+    -- list once we know it's a trainer battle (self.trainerName is only
+    -- set then -- see the "Wild Battle"/"Trainer Battle" caption above).
+    if self.trainerName then
+        love.graphics.print("Can't be caught", math.floor(crX+8), math.floor(ry))
+        return
+    end
+
     love.graphics.print("CATCH RATE", math.floor(crX+8), math.floor(ry))
     ry = ry + crGeom.rowH
 

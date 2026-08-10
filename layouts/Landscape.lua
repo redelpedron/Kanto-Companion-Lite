@@ -31,13 +31,24 @@ return function(W, H, cfg)
         -- false) -- exactly the "landscape party/top bar showing stale
         -- portrait content" bug this guards against.
         topBar   = { x=x0, y=topY, w=usableW, h=topH, isPortrait=false, stackMode=false },
-        party    = { x=x0, y=topY+topH, w=sideW, h=safeB-(topY+topH), isPortrait=false, compact=false },
+        -- showTabHeader is explicit here too, same reasoning as the
+        -- isPortrait/compact comment above: `party` is the fallback rect
+        -- used when the tab strip is hidden (landscape with no rival
+        -- trainer -- see AppController:_applyPartyLayout), so it needs
+        -- its own internal "Party" label and must explicitly say so,
+        -- not just omit the key, or it could inherit a stale `true` left
+        -- over from the last frame that used partyContent instead.
+        party    = { x=x0, y=topY+topH, w=sideW, h=safeB-(topY+topH), isPortrait=false, compact=false, showTabHeader=false },
         -- Party column's own tab-strip/body split (Party / Rival), mirroring
         -- the right column below. Only Landscape publishes these two keys --
         -- Portrait has no party tab strip, so AppController falls back to
         -- plain `party` (untabbed, single panel) whenever they're absent.
         partyTabs    = { x=x0, y=topY+topH, w=sideW, h=tabH },
-        partyContent = { x=x0, y=topY+topH+tabH, w=sideW, h=safeB-(topY+topH)-tabH, isPortrait=false, compact=false },
+        -- showTabHeader=true: partyTabs (above) already renders the
+        -- "Party"/trainer-name label as a tab, so PokemonPanel skips its
+        -- own internal copy for whichever of party/rival panel is laid
+        -- out here to avoid showing the same text twice.
+        partyContent = { x=x0, y=topY+topH+tabH, w=sideW, h=safeB-(topY+topH)-tabH, isPortrait=false, compact=false, showTabHeader=true },
         right    = right,
         -- Right column's own tab-strip/body split, so main.lua (or any
         -- other caller) never has to know the right panel is internally
