@@ -1,5 +1,5 @@
 --- Component: abstract base for all HUD widgets.
--- Lifecycle: init -> update -> draw -> onEvent -> destroy
+-- Lifecycle: init -> update -> draw -> destroy
 -- Components receive only the services they declare via `needs`.
 local Component = {}
 Component.__index = Component
@@ -37,11 +37,8 @@ function Component:init() end
 --- Override in subclass. Called every frame with dt.
 function Component:update(dt) end
 
---- Override in subclass. Called with a DrawContext.
+--- Override in subclass. Called with a layout rect (props table).
 function Component:draw(ctx) end
-
---- Override in subclass. Handle EventBus events here.
-function Component:onEvent(eventName, ...) end
 
 --- Register an EventBus listener that auto-cleans on destroy.
 function Component:_listen(eventName, handler)

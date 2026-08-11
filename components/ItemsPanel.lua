@@ -12,6 +12,7 @@ function ItemsPanel.new(locator, props)
     local self = setmetatable(Component.new(locator, props), ItemsPanel)
     self.inventory = {}
     self._modalBlocking = false
+    self._inBattle = false
     self:_scrollInit()
     return self
 end
@@ -23,6 +24,12 @@ function ItemsPanel:init()
 
     self:_listen("modal.opened", function(self2) self2._modalBlocking = true end)
     self:_listen("modal.closed", function(self2) self2._modalBlocking = false end)
+
+    -- PCService:canOpen() already refuses to open the PC during battle,
+    -- so this is purely visual/hit-test housekeeping to match that --
+    -- the button would otherwise sit there doing nothing on tap.
+    self:_listen("battle.started", function(self2) self2._inBattle = true end)
+    self:_listen("battle.ended", function(self2) self2._inBattle = false end)
 
     self:_listen("input.pressed", function(self2, x, y, consume)
         if not self2._active or self2._modalBlocking then return end
@@ -39,15 +46,17 @@ function ItemsPanel:_handleClick(x, y, consume)
     if not self._props or not self._active then return end
     local px, py, pw, ph = self._props.x, self._props.y, self._props.w, self._props.h
 
-    -- Handle PC button (top-right)
-    local btnW, btnH = 60, 20
-    local btnX = px + pw - btnW - 8
-    local btnY = py + 4
+    -- Handle PC button (top-right) -- hidden during battle, see draw()
+    if not self._inBattle then
+        local btnW, btnH = 60, 20
+        local btnX = px + pw - btnW - 8
+        local btnY = py + 4
 
-    if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
-        self.bus:publish("pc.open")
-        if consume then consume() end
-        return true
+        if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
+            self.bus:publish("pc.open")
+            if consume then consume() end
+            return true
+        end
     end
     
     -- Scrollbar drag hit zone
@@ -58,28 +67,6 @@ function ItemsPanel:_handleClick(x, y, consume)
     end
 
     return false
-end
-
-function ItemsPanel:_categorize(dItem)
-    local balls, heals, other = {}, {}, {}
-    for id, count in pairs(self.inventory) do
-        if type(count) == "number" and count > 0 then
-            local name = (dItem[id] and dItem[id].name) or id
-            local row = { name = name, qty = count }
-            if Helpers.isBallItem(id) then
-                balls[#balls + 1] = row
-            elseif Helpers.isHealItem(id) then
-                heals[#heals + 1] = row
-            else
-                other[#other + 1] = row
-            end
-        end
-    end
-    local function byName(a, b) return a.name < b.name end
-    table.sort(balls, byName)
-    table.sort(heals, byName)
-    table.sort(other, byName)
-    return balls, heals, other
 end
 
 function ItemsPanel:update(dt)
@@ -107,7 +94,7 @@ function ItemsPanel:draw(ctx)
         end
         local sections = 0
         local dItem = game:getItemData()
-        local balls, heals, other = self:_categorize(dItem)
+        local balls, heals, other = Helpers.categorizeItems(dItem, self.inventory)
         if #balls > 0 then sections = sections + 1 end
         if #heals > 0 then sections = sections + 1 end
         if #other > 0 then sections = sections + 1 end
@@ -134,20 +121,22 @@ function ItemsPanel:draw(ctx)
     local btnY = y + 4
 
     local dItem = game:getItemData()
-    local balls, heals, other = self:_categorize(dItem)
+    local balls, heals, other = Helpers.categorizeItems(dItem, self.inventory)
 
-    Colors.set(cfg.COL.hi, 0.6)
-    love.graphics.rectangle("fill", math.floor(btnX), math.floor(btnY), btnW, btnH)
-    Colors.set(cfg.COL.border, 0.3)
-    love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", math.floor(btnX)+0.5, math.floor(btnY)+0.5, btnW-1, btnH-1)
+    if not self._inBattle then
+        Colors.set(cfg.COL.hi, 0.6)
+        love.graphics.rectangle("fill", math.floor(btnX), math.floor(btnY), btnW, btnH)
+        Colors.set(cfg.COL.border, 0.3)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", math.floor(btnX)+0.5, math.floor(btnY)+0.5, btnW-1, btnH-1)
 
-    local f10 = fonts:getFont(10)
-    love.graphics.setFont(f10)
-    Colors.set(cfg.COL.text, 1)
-    local btnLabel = "PC"
-    local btnTextW = f10:getWidth(btnLabel)
-    love.graphics.print(btnLabel, math.floor(btnX + (btnW - btnTextW) / 2), math.floor(btnY + 3))
+        local f10 = fonts:getFont(10)
+        love.graphics.setFont(f10)
+        Colors.set(cfg.COL.text, 1)
+        local btnLabel = "PC"
+        local btnTextW = f10:getWidth(btnLabel)
+        love.graphics.print(btnLabel, math.floor(btnX + (btnW - btnTextW) / 2), math.floor(btnY + 3))
+    end
 
     if #balls == 0 and #heals == 0 and #other == 0 then
         local f10b = fonts:getFont(10)

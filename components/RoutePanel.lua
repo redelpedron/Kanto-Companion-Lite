@@ -43,7 +43,7 @@ function RoutePanel:_countEntries()
     return n
 end
 
--- v1.0.65: compute wrapped height (capped at 9 visible entries)
+-- v1.0.65: compute wrapped height (capped at 5 visible entries)
 function RoutePanel:_wrappedHeight(w, h)
     local cfg = self:_service("ConfigService")
     local MAX_VISIBLE = 5

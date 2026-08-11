@@ -6,26 +6,31 @@ function LayoutSystem.new(locator)
     self._locator = locator
     self.cfg = locator:resolve("ConfigService")
     self.bus = locator:resolve("EventBus")
-    self.currentLayout = nil
-    self.layouts = {}
+    self.saveSvc = locator:resolve("SaveService")
+    self.layoutFn = nil
     return self
 end
 
-function LayoutSystem:registerLayout(name, layoutFn)
-    self.layouts[name] = layoutFn
+--- Set the top-level layout function. Adaptive.lua owns the
+-- portrait/landscape switch internally (it requires Portrait/Landscape
+-- directly), so there's exactly one layout function to drive here --
+-- a name-keyed registry would only ever have one live key.
+function LayoutSystem:setLayout(layoutFn)
+    self.layoutFn = layoutFn
 end
 
 function LayoutSystem:update(dt)
+    if not self.layoutFn then return end
     local W, H = love.graphics.getDimensions()
-    -- Adaptive.lua owns the portrait/landscape switch (same aspect-ratio
-    -- rule); route everything through it instead of duplicating that
-    -- decision here, so there's one place that decides which layout wins.
-    local layoutFn = self.layouts["adaptive"]
-    if layoutFn then
-        local rects = layoutFn(W, H, self.cfg)
-        if rects then
-            self.bus:publish("layout.updated", rects)
-        end
+    -- Forward the persisted "Bottom Topbar" setting onto cfg each frame
+    -- so Landscape.lua can read cfg.topBarBottom the same way it already
+    -- reads every other layout constant. Portrait.lua never looks at
+    -- this field, so it stays unaffected regardless of the setting's
+    -- value.
+    self.cfg.topBarBottom = self.saveSvc:isTopBarBottom()
+    local rects = self.layoutFn(W, H, self.cfg)
+    if rects then
+        self.bus:publish("layout.updated", rects)
     end
 end
 

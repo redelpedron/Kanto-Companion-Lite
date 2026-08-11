@@ -62,7 +62,7 @@ end
 -- FULL rows (landscape): name, status, types, level, numeric HP, xp bar.
 -- =======================================================================
 
-function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, dc, x, y, w, h)
+function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
     local headerH = cfg.PARTY_HEADER_H
     local rowH    = cfg.PARTY_ROW_H
     local cy      = y + headerH
@@ -70,9 +70,9 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, dc, x, y, w, h)
 
     if #self.party == 0 and self._props.emptyMessage then
         local f11 = fonts:getFont(11)
-        dc:setFont(f11)
-        dc:setColor(cfg.COL.dim, 1)
-        dc:print(self._props.emptyMessage, x+8, cy)
+        love.graphics.setFont(f11)
+        Colors.set(cfg.COL.dim, 1)
+        love.graphics.print(self._props.emptyMessage, math.floor(x+8), math.floor(cy))
         return
     end
 
@@ -82,8 +82,8 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, dc, x, y, w, h)
         if img then
             local iw, ih = img:getDimensions()
             local sc = 24 / math.max(iw, ih)
-            dc:setColor(cfg.COL.text, 1)
-            dc:draw(img, x+8, cy+2, 0, sc, sc)
+            Colors.set(cfg.COL.text, 1)
+            love.graphics.draw(img, math.floor(x+8), math.floor(cy+2), 0, sc, sc)
         end
         local hp, maxhp, status = self:_liveStats(m)
 
@@ -92,35 +92,35 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, dc, x, y, w, h)
             nameCol = cfg.COL.se
         end
         local f12 = fonts:getFont(12)
-        dc:setFont(f12)
-        dc:setColor(nameCol, 1)
+        love.graphics.setFont(f12)
+        Colors.set(nameCol, 1)
         local nameStr = Helpers.sanitizeName(m.name)
-        dc:print(nameStr, x+36, cy)
+        love.graphics.print(nameStr, math.floor(x+36), math.floor(cy))
         local tx = x + 36 + f12:getWidth(nameStr)
         if status and status ~= "" and status ~= "OK" then
             local statusStr = " (" .. tostring(status) .. ")"
-            dc:setColor(cfg.COL.lo, 1)
-            dc:print(statusStr, tx, cy)
+            Colors.set(cfg.COL.lo, 1)
+            love.graphics.print(statusStr, math.floor(tx), math.floor(cy))
             tx = tx + f12:getWidth(statusStr)
         end
         tx = tx + f12:getWidth(" ")
         if m.types then
             local f9 = fonts:getFont(9)
-            dc:setFont(f9)
+            love.graphics.setFont(f9)
             for _, t2 in ipairs(m.types) do
                 local tname = TypeColors.normalize(t2)
                 if tname ~= "" then
-                    dc:setColor(cfg.TYPE[tname] or cfg.COL.dim, 1)
-                    dc:print(tname, tx, cy+1)
+                    Colors.set(cfg.TYPE[tname] or cfg.COL.dim, 1)
+                    love.graphics.print(tname, math.floor(tx), math.floor(cy+1))
                     tx = tx + f9:getWidth(tname .. " ")
                 end
             end
         end
         local f10b = fonts:getFont(10)
-        dc:setFont(f10b)
-        dc:setColor(cfg.COL.dim, 1)
+        love.graphics.setFont(f10b)
+        Colors.set(cfg.COL.dim, 1)
         local lvStr = "Lv" .. tostring(m.level)
-        dc:print(lvStr, x+w-8-f10b:getWidth(lvStr), cy)
+        love.graphics.print(lvStr, math.floor(x+w-8-f10b:getWidth(lvStr)), math.floor(cy))
         -- v2.1.35: maxhp is nil for a benched rival-roster mon (its HP
         -- genuinely isn't known until it's sent into battle -- see
         -- GameDataSystem). Render that as "unknown" instead of a fake
@@ -129,16 +129,16 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, dc, x, y, w, h)
         local frac = known and Math.clamp((hp or 0) / math.max(1, maxhp), 0, 1) or 0
         local barW = w - 44 - 50
         local barY = cy + 11
-        dc:setColor({0.12,0.12,0.14}, 1)
-        dc:rectangle("fill", x+36, barY, barW, 4)
+        Colors.set({0.12,0.12,0.14}, 1)
+        love.graphics.rectangle("fill", math.floor(x+36), math.floor(barY), math.floor(barW), 4)
         if known and frac > 0 then
-            dc:setColor(Colors.hpColor(frac), 1)
-            dc:rectangle("fill", x+36, barY, barW*frac, 4)
+            Colors.set(Colors.hpColor(frac), 1)
+            love.graphics.rectangle("fill", math.floor(x+36), math.floor(barY), math.floor(barW*frac), 4)
         end
         local hpStr = known and string.format("%3d/%3d", hp or 0, maxhp) or "?"
-        dc:setFont(f10b)
-        dc:setColor(cfg.COL.dim, 1)
-        dc:print(hpStr, x+w-8-f10b:getWidth(hpStr), cy+10)
+        love.graphics.setFont(f10b)
+        Colors.set(cfg.COL.dim, 1)
+        love.graphics.print(hpStr, math.floor(x+w-8-f10b:getWidth(hpStr)), math.floor(cy+10))
         if m.xpProgress ~= nil then
             self._expBar.progress = m.xpProgress
             self._expBar._props = { x = x+36, y = cy+16, w = barW, h = 2 }
@@ -157,7 +157,7 @@ end
 -- one slim, wrap-height strip above the right panel.
 -- =======================================================================
 
-function PokemonPanel:_drawCompactStrip(cfg, fonts, sprites, dc, x, y, w, h)
+function PokemonPanel:_drawCompactStrip(cfg, fonts, sprites, x, y, w, h)
     local n = #self.party
     if n == 0 then return end
 
@@ -194,34 +194,33 @@ function PokemonPanel:_drawCompactStrip(cfg, fonts, sprites, dc, x, y, w, h)
             -- super-effective move against the current enemy/wild Pokémon
             if self.enemyTypes and te:hasSuperEffectiveMove(m, self.enemyTypes) then
                 local glowR = iconSz * 0.55
-                dc:setColor(cfg.COL.se, 0.35)
-                dc:circle("fill", cellCx, rowY + iconSz/2, glowR)
+                Colors.set(cfg.COL.se, 0.35)
+                love.graphics.circle("fill", math.floor(cellCx), math.floor(rowY + iconSz/2), glowR)
             end
 
-            dc:setColor(cfg.COL.text, 1)
-            dc:draw(img, cellCx - (iw*sc)/2, rowY, 0, sc, sc)
+            Colors.set(cfg.COL.text, 1)
+            love.graphics.draw(img, math.floor(cellCx - (iw*sc)/2), math.floor(rowY), 0, sc, sc)
         end
 
         local hp, maxhp, status = self:_liveStats(m)
         local frac = Math.clamp((hp or 0) / math.max(1, maxhp or 1), 0, 1)
         local hpStr = tostring(hp or 0) .. "/" .. tostring(maxhp or 0)
 
-        dc:setFont(fHp)
-        dc:setColor(Colors.hpBarColor(frac), 1)
-        dc:print(hpStr, cellCx - fHp:getWidth(hpStr)/2, rowY + iconSz + 2)
+        love.graphics.setFont(fHp)
+        Colors.set(Colors.hpBarColor(frac), 1)
+        love.graphics.print(hpStr, math.floor(cellCx - fHp:getWidth(hpStr)/2), math.floor(rowY + iconSz + 2))
 
         if status and status ~= "" and status ~= "OK" then
             local statusStr = tostring(status)
-            dc:setFont(fStatus)
-            dc:setColor(cfg.COL.lo, 1)
-            dc:print(statusStr, cellCx - fStatus:getWidth(statusStr)/2,
-                rowY + iconSz + 2 + hpLineH)
+            love.graphics.setFont(fStatus)
+            Colors.set(cfg.COL.lo, 1)
+            love.graphics.print(statusStr, math.floor(cellCx - fStatus:getWidth(statusStr)/2),
+                math.floor(rowY + iconSz + 2 + hpLineH))
         end
     end
 end
 
 function PokemonPanel:draw(ctx)
-    local dc     = self:_service("DrawContext")
     local cfg    = self:_service("ConfigService")
     local fonts  = self:_service("FontService")
     local sprites= self:_service("SpriteService")
@@ -237,15 +236,15 @@ function PokemonPanel:draw(ctx)
         drawH = math.min(h, neededH)
     end
 
-    dc:setColor(cfg.COL.panel, 0.96)
-    dc:rectangle("fill", x, y, w, drawH)
-    dc:setLineWidth(1)
-    dc:setColor(cfg.COL.border, 0.3)
-    dc:rectangle("line", x+0.5, y+0.5, w-1, drawH-1)
+    Colors.set(cfg.COL.panel, 0.96)
+    love.graphics.rectangle("fill", math.floor(x), math.floor(y), math.floor(w), math.floor(drawH))
+    love.graphics.setLineWidth(1)
+    Colors.set(cfg.COL.border, 0.3)
+    love.graphics.rectangle("line", math.floor(x+0.5), math.floor(y+0.5), math.floor(w-1), math.floor(drawH-1))
 
     local f14 = fonts:getFont(14)
-    dc:setFont(f14)
-    dc:setColor(cfg.COL.text, 1)
+    love.graphics.setFont(f14)
+    Colors.set(cfg.COL.text, 1)
     -- v2.1.40: skip this label whenever the landscape partyTabs strip
     -- above is already showing the same "Party"/trainer-name text as a
     -- tab (see layouts/Landscape.lua's showTabHeader) -- redrawing it
@@ -253,13 +252,13 @@ function PokemonPanel:draw(ctx)
     -- landscape's untabbed fallback (no active trainer battle), where
     -- this is the only place that label appears.
     if not self._props.showTabHeader then
-        dc:print(self._props.label or "Party", x+8, y+4)
+        love.graphics.print(self._props.label or "Party", math.floor(x+8), math.floor(y+4))
     end
 
     if ctx.compact then
-        self:_drawCompactStrip(cfg, fonts, sprites, dc, x, y, w, h)
+        self:_drawCompactStrip(cfg, fonts, sprites, x, y, w, h)
     else
-        self:_drawFullRows(cfg, fonts, sprites, te, dc, x, y, w, h)
+        self:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
     end
 end
 

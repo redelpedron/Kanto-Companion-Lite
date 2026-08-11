@@ -44,20 +44,4 @@ function ServiceLocator:has(name)
     return self._registry[name] ~= nil
 end
 
---- Unregister a service (useful for testing / hot-reload).
-function ServiceLocator:unregister(name)
-    self._registry[name] = nil
-    self._cache[name] = nil
-end
-
---- Invalidate a cached service. Next resolve() will re-create it (for factories).
-function ServiceLocator:invalidate(name)
-    self._cache[name] = nil
-end
-
---- Invalidate all cached services. Useful on game reset.
-function ServiceLocator:invalidateAll()
-    self._cache = {}
-end
-
 return ServiceLocator

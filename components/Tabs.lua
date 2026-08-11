@@ -82,8 +82,4 @@ function Tabs:draw(ctx)
     return h
 end
 
-function Tabs:getActiveTab()
-    return self.tabs[self.activeIdx]
-end
-
 return Tabs

@@ -15,15 +15,6 @@ function RenderSystem:registerComponent(comp)
     table.insert(self.components, comp)
 end
 
-function RenderSystem:unregisterComponent(comp)
-    for i, c in ipairs(self.components) do
-        if c == comp then
-            table.remove(self.components, i)
-            return
-        end
-    end
-end
-
 function RenderSystem:draw()
     if not (love and love.graphics) then return end
     local log = self._locator:has("LogService") and self._locator:resolve("LogService") or nil

@@ -390,30 +390,6 @@ function PCPopup:_drawItemsTab(L, cfg, fonts)
     self:_drawItemList(p2, cfg, fonts, dItem, "pc", "PC ITEMS", pc:getItems(), pc:pcSlotCount(), pc:pcItemCapacity())
 end
 
--- Splits {itemId=count} into Balls / Healing / Other, sorted by name --
--- same 3-bucket scheme ItemsPanel uses, for a consistent look mod-wide.
-function PCPopup:_categorizeItems(dItem, itemsTable)
-    local balls, heals, other = {}, {}, {}
-    for id, count in pairs(itemsTable) do
-        if type(count) == "number" and count > 0 then
-            local name = (dItem[id] and dItem[id].name) or id
-            local row = { id = id, name = name, qty = count }
-            if Helpers.isBallItem(id) then
-                balls[#balls + 1] = row
-            elseif Helpers.isHealItem(id) then
-                heals[#heals + 1] = row
-            else
-                other[#other + 1] = row
-            end
-        end
-    end
-    local function byName(a, b) return a.name < b.name end
-    table.sort(balls, byName)
-    table.sort(heals, byName)
-    table.sort(other, byName)
-    return balls, heals, other
-end
-
 function PCPopup:_drawItemList(p, cfg, fonts, dItem, side, title, itemsTable, slotCount, capacity)
     Colors.set(cfg.COL.panelTop, 0.9)
     love.graphics.rectangle("fill", math.floor(p.x), math.floor(p.y), math.floor(p.w), math.floor(p.h))
@@ -434,7 +410,7 @@ function PCPopup:_drawItemList(p, cfg, fonts, dItem, side, title, itemsTable, sl
     Colors.set(slotCount >= capacity and cfg.COL.lo or cfg.COL.dim, 1)
     love.graphics.print(capStr, math.floor(p.x + p.w - 8 - f11:getWidth(capStr)), math.floor(p.y + 9))
 
-    local balls, heals, other = self:_categorizeItems(dItem, itemsTable)
+    local balls, heals, other = Helpers.categorizeItems(dItem, itemsTable)
     if #balls == 0 and #heals == 0 and #other == 0 then
         local f12 = fonts:getFont(12)
         love.graphics.setFont(f12)
@@ -598,17 +574,11 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
                 love.graphics.print("[" .. statusStr .. "]", math.floor(nx + f11:getWidth(name) + 4), math.floor(y + 2))
             end
             
-            -- Calculate XP progress
-            local xpProg = 0
-            if growth and def and def.growthRate and mon.exp and mon.level then
-                local cur = growth.expForLevel(def.growthRate, mon.level, rates)
-                local nxt = growth.expForLevel(def.growthRate, mon.level + 1, rates)
-                if mon.level >= 100 or nxt <= cur then
-                    xpProg = 1
-                else
-                    xpProg = math.max(0, math.min(1, (mon.exp - cur) / (nxt - cur)))
-                end
-            end
+            -- XP progress. Unlike PokemonPanel's main party view, this
+            -- panel always draws the bar (never hides it for unknown
+            -- data), so an unavailable result defaults to 0 rather than
+            -- being left nil.
+            local xpProg = Helpers.expProgress(growth, def, mon, rates) or 0
             
             -- Types (full names) with color coding
             local typeY = y + 14

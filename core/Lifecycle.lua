@@ -70,17 +70,6 @@ function Lifecycle:draw()
     end
 end
 
---- Destroy a single component.
-function Lifecycle:destroyComponent(instance)
-    for i, comp in ipairs(self._components) do
-        if comp == instance then
-            comp:destroy()
-            table.remove(self._components, i)
-            return
-        end
-    end
-end
-
 --- Destroy everything.
 function Lifecycle:shutdown()
     for _, comp in ipairs(self._components) do

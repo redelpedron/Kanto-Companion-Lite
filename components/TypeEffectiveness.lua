@@ -16,11 +16,6 @@ function TypeEffectiveness.new(locator, props)
     return self
 end
 
-function TypeEffectiveness:init()
-    self:_listen("battle.started", function() end)
-    self:_listen("battle.ended", function() end)
-end
-
 function TypeEffectiveness:_ensureTypeChart()
     if self._typeChartReady then return true end
     local gameService = self:_service("GameService")

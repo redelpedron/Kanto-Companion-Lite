@@ -181,4 +181,56 @@ function Helpers.isHealItem(id)
         or id:find("ELIXER", 1, true) ~= nil
 end
 
+-- Progress toward the next level, as a 0..1 fraction (plus exp still
+-- needed) for `mon` given its species growth-rate curve. Requires the
+-- engine's growth system (src.pokemon.Growth, see GameService) and the
+-- species def for its growthRate. Returns nil, nil if any required piece
+-- is missing (no growth system, no def, mon not carrying exp/level yet)
+-- -- callers that want to hide an xp bar rather than draw a misleading
+-- empty one (see PokemonPanel's `m.xpProgress ~= nil` check) rely on
+-- that nil, not a 0 fallback.
+-- Extracted from two near-identical copies: GameDataSystem (building the
+-- party.updated payload) and PCPopup (the PC-popup party view), which
+-- had drifted into two independent implementations of the same formula.
+function Helpers.expProgress(growth, def, mon, rates)
+    if not (growth and def and def.growthRate and mon.exp and mon.level) then
+        return nil, nil
+    end
+    local cur = growth.expForLevel(def.growthRate, mon.level, rates)
+    local nxt = growth.expForLevel(def.growthRate, mon.level + 1, rates)
+    if mon.level >= 100 or nxt <= cur then
+        return 1, 0
+    end
+    local prog = math.max(0, math.min(1, (mon.exp - cur) / (nxt - cur)))
+    local next_ = math.max(0, nxt - cur)
+    return prog, next_
+end
+
+-- Splits {itemId=count} into Balls / Healing / Other, sorted by name --
+-- the shared 3-bucket scheme both ItemsPanel and PCPopup display, so
+-- both mod-wide item lists always agree on categorization/ordering.
+-- Extracted from two near-identical hand-rolled copies (v2.1.41 and
+-- earlier). Each row is {id, name, qty}.
+function Helpers.categorizeItems(dItem, itemsTable)
+    local balls, heals, other = {}, {}, {}
+    for id, count in pairs(itemsTable) do
+        if type(count) == "number" and count > 0 then
+            local name = (dItem[id] and dItem[id].name) or id
+            local row = { id = id, name = name, qty = count }
+            if Helpers.isBallItem(id) then
+                balls[#balls + 1] = row
+            elseif Helpers.isHealItem(id) then
+                heals[#heals + 1] = row
+            else
+                other[#other + 1] = row
+            end
+        end
+    end
+    local function byName(a, b) return a.name < b.name end
+    table.sort(balls, byName)
+    table.sort(heals, byName)
+    table.sort(other, byName)
+    return balls, heals, other
+end
+
 return Helpers

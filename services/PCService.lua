@@ -81,17 +81,6 @@ function PCService:getItemCount(itemId)
     return items[itemId] or 0
 end
 
--- Check if PC has any items
-function PCService:isEmpty()
-    local items = self:getItems()
-    for _, qty in pairs(items) do
-        if type(qty) == "number" and qty > 0 then
-            return false
-        end
-    end
-    return true
-end
-
 function PCService:getBagItems()
     return self:_getGameService():getInventory()
 end

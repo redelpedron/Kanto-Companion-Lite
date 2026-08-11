@@ -73,10 +73,6 @@ function AppController:_createCore()
 
     local ConfigService = require("services.ConfigService")
     self.locator:register("ConfigService", ConfigService.new(self.locator))
-
-    -- FIX: register DrawContext so components never touch love.graphics directly
-    local DrawContext = require("util.DrawContext")
-    self.locator:register("DrawContext", DrawContext.new())
 end
 
 -- =======================================================================
@@ -144,9 +140,7 @@ function AppController:_registerSystems()
 end
 
 function AppController:_registerLayouts()
-    self.layoutSys:registerLayout("portrait", require("layouts.Portrait"))
-    self.layoutSys:registerLayout("landscape", require("layouts.Landscape"))
-    self.layoutSys:registerLayout("adaptive", require("layouts.Adaptive"))
+    self.layoutSys:setLayout(require("layouts.Adaptive"))
 end
 
 -- =======================================================================
@@ -358,8 +352,16 @@ function AppController:_subscribeEvents()
         self.enemyPan:setActive(false)
         self.routePan:setActive(false)
         self.itemsPan:setActive(true)
-        local W, H = love.graphics.getDimensions()
-        self.topBar:setLayout({ x=0, y=0, w=W, h=locator:resolve("ConfigService").TOP_BAR_H })
+        -- Reuse the last computed layout rect instead of hardcoding a
+        -- fresh {x=0,y=0,...} one here: a hardcoded rect always pins the
+        -- bar to the top, silently overriding the "Bottom Topbar" setting
+        -- (and stackMode/isPortrait) the instant a battle ends.
+        if self._lastLayoutRects then
+            self.topBar:setLayout(self._lastLayoutRects.topBar)
+        else
+            local W, H = love.graphics.getDimensions()
+            self.topBar:setLayout({ x=0, y=0, w=W, h=locator:resolve("ConfigService").TOP_BAR_H })
+        end
     end)
 
     -- Route updates ------------------------------------------------------
@@ -456,7 +458,15 @@ end
 -- Hook wrapping
 -- =======================================================================
 function AppController:_wrapHooks()
+    local mod = self.mod
     local saveSvc = self.saveSvc
+
+    -- "KANTO COMPANION LITE" used to be a direct ON/OFF row (step toggled
+    -- overlay visibility in place). It now opens a SETTINGS submenu with
+    -- one row per setting instead, same pattern as the quality_of_life
+    -- mod's own "QUALITY OF LIFE" -> CONFIGURE submenu.
+    local SettingsScreen = require("core.SettingsScreen")
+    SettingsScreen.install(mod, saveSvc)
 
     self.mod.hooks:wrap("ui.options.rows", function(next, game, rows)
         local out = next(game, rows)
@@ -465,29 +475,14 @@ function AppController:_wrapHooks()
             id = "kanto_companion_lite",
             label = "KANTO COMPANION LITE",
             value = function(g)
-                return saveSvc:isVisible() and "ON" or "OFF"
+                return "SETTINGS"
             end,
-            step = function(g, dir)
-                saveSvc:toggleVisible()
-                return true
+            activate = function(g)
+                mod.ui.push(g, SettingsScreen.SCREEN_ID)
             end,
         }
         return out
     end)
-
-    local ok, err = pcall(function()
-        self.mod.hooks:wrap("ui.start_menu.items", function(next, game, items)
-            local out = next(game, items)
-            table.insert(out, {
-                label = saveSvc:isVisible() and "Hide Companion" or "Show Companion",
-                action = function() saveSvc:toggleVisible() end
-            })
-            return out
-        end)
-    end)
-    if not ok then
-        self.locator:resolve("LogService"):warning("ui.start_menu.items hook failed: %s", tostring(err))
-    end
 end
 
 -- =======================================================================

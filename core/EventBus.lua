@@ -14,7 +14,6 @@ EventBus.__index = EventBus
 function EventBus.new()
     local self = setmetatable({}, EventBus)
     self._listeners = {}      -- eventName -> { listener1, listener2, ... }
-    self._once = {}           -- eventName -> { [listener]=true }
     return self
 end
 
@@ -40,17 +39,6 @@ function EventBus:subscribe(eventName, listener)
     end
 end
 
---- Subscribe once; auto-unsubscribes after first fire.
-function EventBus:once(eventName, listener)
-    local unsub
-    local wrapper = function(...)
-        unsub()
-        listener(...)
-    end
-    unsub = self:subscribe(eventName, wrapper)
-    return unsub
-end
-
 --- Publish an event to all subscribers.
 function EventBus:publish(eventName, ...)
     local list = self._listeners[eventName]
@@ -68,15 +56,6 @@ function EventBus:publish(eventName, ...)
                 self._log:error("EventBus [%s]: %s", eventName, tostring(err))
             end
         end
-    end
-end
-
---- Remove all listeners for a given event, or all events if nil.
-function EventBus:clear(eventName)
-    if eventName then
-        self._listeners[eventName] = nil
-    else
-        self._listeners = {}
     end
 end
 

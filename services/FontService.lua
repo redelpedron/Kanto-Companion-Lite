@@ -18,12 +18,4 @@ function FontService:getFont(px)
     return self._cache[px]
 end
 
-function FontService:measure(str, px)
-    return self:getFont(px):getWidth(str)
-end
-
-function FontService:clear()
-    self._cache = {}
-end
-
 return FontService

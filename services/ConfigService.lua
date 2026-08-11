@@ -49,11 +49,6 @@ ConfigService.BALL_MULT = {
     SAFARI_BALL = 1.5,
 }
 
--- Default encounter buckets
-ConfigService.ENCOUNTER_BUCKETS = {
-    51, 102, 141, 166, 191, 216, 229, 242, 253, 256
-}
-
 -- Layout constants
 ConfigService.TOP_BAR_H = 28        -- landscape single-row top bar height
 ConfigService.TOP_BAR_ROW_H = 24    -- per-row height in portrait's stacked top bar

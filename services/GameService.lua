@@ -57,16 +57,8 @@ function GameService:getItemData()
     return self._data.items or {}
 end
 
-function GameService:getEncounterData()
-    return self._data.encounters or {}
-end
-
 function GameService:getGrowthRates()
     return self._data.growth_rates or {}
-end
-
-function GameService:getConstants()
-    return self._data.constants or {}
 end
 
 function GameService:getOverworld()
@@ -112,6 +104,133 @@ end
 function GameService:getRepelSteps()
     local save = self:getSave()
     return (save and save.repelSteps) or 0
+end
+
+-- No confirmed field name for the Safari Zone step counter -- the host
+-- engine's source isn't available in this sandbox to check against.
+-- FIX: the previous version of this search required BOTH "safari" and
+-- "step" in the key name even when looking inside `save.safari` --  but
+-- a field nested under a table already called `safari` would realistically
+-- just be named "steps" or "remaining", with no need to repeat "safari"
+-- in its own key. That made the nested branch dead: it could only ever
+-- match a key that renamed itself redundantly, which was never in scope
+-- to begin with. Now the "safari" requirement only applies to the
+-- top-level (unscoped) search; anything inside save.safari only has to
+-- look like a step counter.
+--
+-- Once this is confirmed for real (see _debugSafariCandidates below),
+-- fill in CONFIRMED_FIELD / CONFIRMED_CONTAINER and delete the search +
+-- debug path -- they're scaffolding, not the intended long-term shape.
+function GameService:getSafariSteps()
+    local save = self:getSave()
+    if not save then return 0 end
+
+    -- FILL IN ONCE CONFIRMED (see the log lines described below), e.g.:
+    --   local CONFIRMED_CONTAINER, CONFIRMED_FIELD = save, "safariSteps"
+    --   local CONFIRMED_CONTAINER, CONFIRMED_FIELD = save.safari, "steps"
+    local CONFIRMED_CONTAINER, CONFIRMED_FIELD = nil, nil
+    if CONFIRMED_FIELD and type(CONFIRMED_CONTAINER) == "table" then
+        local v = CONFIRMED_CONTAINER[CONFIRMED_FIELD]
+        if type(v) == "number" then return v end
+    end
+
+    local function findByName(t, requireSafariInName)
+        if type(t) ~= "table" then return nil end
+        for k, v in pairs(t) do
+            if type(k) == "string" and type(v) == "number" then
+                local lk = k:lower()
+                if lk:find("step", 1, true) then
+                    if not requireSafariInName or lk:find("safari", 1, true) then
+                        return v
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    local found = findByName(save, true) or findByName(save.safari, false)
+    if found then return found end
+
+    self:_debugSafariCandidates(save)
+    return 0
+end
+
+-- Diagnostic-only: collect every numeric field that could plausibly be
+-- the step counter and log the set whenever it changes. A live-updating
+-- log while you actually walk around the Safari Zone is far more
+-- reliable than a name guess -- the field that ticks down by exactly 1
+-- per step you take is unambiguous, name or no name. Only fires while
+-- GameService:isInSafariZone() is true (see the one call site in
+-- GameDataSystem), and stops logging after 8 changed snapshots so a
+-- long test session doesn't spam the mod log forever if the real field
+-- turns out to live somewhere none of these three tables cover.
+function GameService:_debugSafariCandidates(save)
+    if not self._locator:has("LogService") then return end
+    local log = self._locator:resolve("LogService")
+    self._safariDumpCount = self._safariDumpCount or 0
+    if self._safariDumpCount >= 8 then return end
+
+    local candidates = {}
+    local function collect(t, prefix, anyNumericField)
+        if type(t) ~= "table" then return end
+        for k, v in pairs(t) do
+            if type(k) == "string" and type(v) == "number" then
+                local lk = k:lower()
+                -- Inside save.safari, "safari" is already implied by the
+                -- container, so any number there is worth listing; for
+                -- the unscoped tables (save, overworld) only list fields
+                -- that look name-relevant, or the dump would be huge.
+                if anyNumericField or lk:find("step", 1, true) or lk:find("safari", 1, true) then
+                    candidates[prefix .. k] = v
+                end
+            end
+        end
+    end
+    collect(save, "save.", false)
+    collect(save.safari, "save.safari.", true)
+    collect(self:getOverworld(), "overworld.", false)
+
+    local keys = {}
+    for k in pairs(candidates) do keys[#keys + 1] = k end
+    table.sort(keys)
+
+    -- Only re-log when something in the snapshot actually moved --
+    -- that's the signal that separates a real, live step counter from
+    -- an unrelated static field that merely has a similar-sounding name.
+    local changed = false
+    if not self._safariLastSnapshot then
+        changed = true
+    else
+        for _, k in ipairs(keys) do
+            if self._safariLastSnapshot[k] ~= candidates[k] then
+                changed = true
+                break
+            end
+        end
+    end
+    self._safariLastSnapshot = candidates
+    if not changed then return end
+
+    self._safariDumpCount = self._safariDumpCount + 1
+    if #keys == 0 then
+        log:info("[Safari debug %d/8] no numeric candidates in save / save.safari / overworld -- the field may live somewhere else entirely", self._safariDumpCount)
+        return
+    end
+    local parts = {}
+    for _, k in ipairs(keys) do
+        parts[#parts + 1] = string.format("%s=%s", k, tostring(candidates[k]))
+    end
+    log:info("[Safari debug %d/8] candidates (take a few steps and see which one ticks down): %s", self._safariDumpCount, table.concat(parts, ", "))
+end
+
+-- Safari Zone maps all share a "SAFARI_ZONE_*" mapId prefix (matched on
+-- the raw id, not the title-cased display name from formatMapName, so
+-- this can't be fooled by some other unrelated map that happens to
+-- contain the words "Safari Zone" in its formatted name).
+function GameService:isInSafariZone()
+    local mapId = self:getCurrentMapId()
+    return mapId ~= nil and mapId:match("^SAFARI_ZONE") ~= nil
 end
 
 function GameService:isInGame()

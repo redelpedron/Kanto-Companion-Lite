@@ -26,8 +26,4 @@ function SpriteService:getSprite(speciesId, pokemonData)
     return img
 end
 
-function SpriteService:clear()
-    self._cache = setmetatable({}, { __mode = "v" })
-end
-
 return SpriteService
