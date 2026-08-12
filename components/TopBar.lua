@@ -5,6 +5,7 @@ local Helpers   = require("util.Helpers")
 
 local TopBar = setmetatable({}, { __index = Component })
 TopBar.__index = TopBar
+TopBar.__name = "TopBar"
 TopBar.needs = { "ConfigService", "FontService", "GameService" }
 
 function TopBar.new(locator, props)

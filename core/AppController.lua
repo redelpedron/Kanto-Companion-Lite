@@ -178,10 +178,12 @@ function AppController:_createUIComponents()
     self.tabs     = self.life:createComponent(Tabs, self.locator, { x=0, y=0, w=100, tabs={}, activeIdx=1 })
 
     -- Second, independent tab strip for the party column (landscape only).
+    -- Starts with just "Party" -- the Rival tab is added/removed by
+    -- rival_trainer.updated as trainer battles start/end (see below).
     -- changeEvent keeps its taps from colliding with the right column's
     -- "tab.changed" on the shared EventBus.
     self.partyTabs = self.life:createComponent(Tabs, self.locator, {
-        x=0, y=0, w=100, tabs={ "Party", "Rival" }, activeIdx=1,
+        x=0, y=0, w=100, tabs={ "Party" }, activeIdx=1,
         changeEvent = "party_tab.changed",
     })
 
@@ -190,21 +192,16 @@ function AppController:_createUIComponents()
     self.pcPopup:setActive(false)
 
     -- Rival tab and its tab strip start hidden: we don't know yet whether
-    -- we're in landscape (layout.updated hasn't fired), and the tab strip
-    -- itself only ever appears once a trainer battle is actually underway
-    -- (see _hasRivalTrainer / rival_trainer.updated below) -- wild
-    -- encounters and free-roam never show it, even in landscape.
+    -- we're in landscape (layout.updated hasn't fired). Once it does, the
+    -- strip shows/hides purely on orientation -- see _applyPartyLayout.
     self.rivalPan:setActive(false)
     self.partyTabs:setActive(false)
     self.currentPartyDrawers = { self.partyPan }
     self._isLandscapeParty = false
-    -- True only while BattleSystem reports an opposing trainer (see
-    -- rival_trainer.updated). Gates whether the Party/Rival tab strip is
-    -- allowed to show at all, independent of orientation.
-    self._hasRivalTrainer = false
     -- Most recent rects from layout.updated, replayed through
-    -- _applyPartyLayout() whenever _hasRivalTrainer flips so the tab strip
-    -- can appear/disappear mid-battle without waiting on a resize/rotate.
+    -- _applyPartyLayout() whenever rival_trainer.updated fires so the
+    -- Rival tab's content (not its visibility) updates immediately
+    -- rather than waiting on a resize/rotate.
     self._lastLayoutRects = nil
 end
 
@@ -249,11 +246,12 @@ function AppController:_subscribeEvents()
         -- New TopBar consolidation: single topBar with stackMode in portrait
         self.topBar:setLayout(rects.topBar)
 
-        -- Party column: landscape gets a Party/Rival tab strip (see
-        -- Landscape.lua's partyTabs/partyContent), but only while a trainer
-        -- battle is actually on (_hasRivalTrainer); otherwise -- and always
-        -- in portrait, which has neither key -- it falls back to the
-        -- original single, untabbed panel.
+        -- Party column: landscape always gets the tab strip itself (see
+        -- Landscape.lua's partyTabs/partyContent), matching the right
+        -- column's always-on Enemy/Items strip -- but the Rival tab inside
+        -- it only exists during an actual trainer battle (see
+        -- rival_trainer.updated). Portrait has neither key so it always
+        -- falls back to the original single, untabbed panel.
         self:_applyPartyLayout(rects)
 
         local inBattle = locator:resolve("BattleService"):isInBattle()
@@ -305,24 +303,19 @@ function AppController:_subscribeEvents()
         self:_applyPartyTab(idx)
     end)
 
-    -- Rival tab label: falls back to "Rival" outside of trainer battles
-    -- (or before the first one starts), and to the actual trainer's name
-    -- once BattleSystem reports one. `name` is nil for wild encounters and
-    -- whenever no battle is running (see BattleSystem), so it doubles as
-    -- the trainer-battle flag that gates the tab strip itself below.
+    -- Rival tab: only exists in the tab list while an actual trainer
+    -- battle is on. `name` is nil for wild encounters and whenever no
+    -- battle is running (see BattleSystem), so it doubles as the
+    -- trainer-battle flag here.
     bus:subscribe("rival_trainer.updated", function(name)
-        self.partyTabs:setTabs({ "Party", name or "Rival" })
-        self.rivalPan._props.label = name or "Rival"
-
         local hasTrainer = name ~= nil
-        if hasTrainer ~= self._hasRivalTrainer then
-            self._hasRivalTrainer = hasTrainer
-            -- Re-run the party column layout immediately so the tab strip
-            -- appears/disappears the instant the trainer battle starts or
-            -- ends, rather than waiting on the next resize/rotate to pick
-            -- up the new _hasRivalTrainer value.
-            self:_applyPartyLayout(self._lastLayoutRects)
-        end
+        self.partyTabs:setTabs(hasTrainer and { "Party", name or "Rival" } or { "Party" })
+        self.rivalPan._props.label = name or "Rival"
+        -- Tabs:setTabs already clamped activeIdx back to 1 if the Rival
+        -- tab just disappeared while it was selected -- make sure the
+        -- actual panel selection follows suit instead of leaving rivalPan
+        -- active with no tab pointing at it.
+        self:_applyPartyTab(self.partyTabs.activeIdx)
     end)
 
     -- Battle lifecycle ---------------------------------------------------
@@ -407,18 +400,20 @@ end
 -- =======================================================================
 -- Decides whether the party column shows the tabbed Party/Rival strip or
 -- falls back to a single untabbed panel, and lays out whichever is active.
--- Tabbed mode requires BOTH landscape (rects.partyTabs present) AND an
--- actual trainer battle in progress (self._hasRivalTrainer) -- so the
--- Rival tab never appears outside of a rival/trainer battle, even on a
--- landscape device. Called from layout.updated (on resize/rotate) and
--- from rival_trainer.updated (the instant a trainer battle starts/ends),
--- replaying the last known rects so neither caller needs its own copy of
--- this branching.
+-- Tabbed mode itself is purely orientation-driven (rects.partyTabs
+-- present = landscape), matching the right column's always-tabbed
+-- Enemy/Items -- so even with just "Party" in the list (no trainer
+-- battle), the title still renders as a tab rather than the old inline
+-- white-text label. Whether the *Rival* tab specifically exists in that
+-- list is handled separately, in rival_trainer.updated below.
+-- Called from layout.updated (on resize/rotate) and from
+-- rival_trainer.updated (trainer name/roster changes), replaying the last
+-- known rects so neither caller needs its own copy of this branching.
 function AppController:_applyPartyLayout(rects)
     if not rects then return end
     self._lastLayoutRects = rects
 
-    local showPartyTabs = rects.partyTabs ~= nil and self._hasRivalTrainer
+    local showPartyTabs = rects.partyTabs ~= nil
     local enteringLandscapeParty = showPartyTabs and not self._isLandscapeParty
     self._isLandscapeParty = showPartyTabs
 
@@ -466,7 +461,7 @@ function AppController:_wrapHooks()
     -- one row per setting instead, same pattern as the quality_of_life
     -- mod's own "QUALITY OF LIFE" -> CONFIGURE submenu.
     local SettingsScreen = require("core.SettingsScreen")
-    SettingsScreen.install(mod, saveSvc)
+    SettingsScreen.install(mod, saveSvc, self.locator)
 
     self.mod.hooks:wrap("ui.options.rows", function(next, game, rows)
         local out = next(game, rows)

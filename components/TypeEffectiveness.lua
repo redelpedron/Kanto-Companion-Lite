@@ -7,6 +7,7 @@ local Helpers = require("util.Helpers")
 
 local TypeEffectiveness = setmetatable({}, { __index = Component })
 TypeEffectiveness.__index = TypeEffectiveness
+TypeEffectiveness.__name = "TypeEffectiveness"
 TypeEffectiveness.needs = { "GameService", "EventBus" }
 
 function TypeEffectiveness.new(locator, props)

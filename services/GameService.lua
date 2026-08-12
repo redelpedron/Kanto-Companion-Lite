@@ -10,6 +10,14 @@ function GameService.new(locator)
     self._locator = locator
     self._game = nil
     self._data = {}
+    -- Weak keys: entries for popped/discarded stack states get collected
+    -- automatically instead of pinning them in memory or requiring manual
+    -- cleanup. See isMenuOpen below.
+    self._menuOpenCache = setmetatable({}, { __mode = "k" })
+    -- DEBUG (temporary): logs the raw mapId once per SAFARI_ZONE_* entry
+    -- so we can see whether the gate/ticket-booth map shares the same
+    -- prefix as the actual zone areas. Remove once confirmed either way.
+    self._lastSafariMapId = nil
     return self
 end
 
@@ -108,16 +116,6 @@ end
 
 -- No confirmed field name for the Safari Zone step counter -- the host
 -- engine's source isn't available in this sandbox to check against.
--- FIX: the previous version of this search required BOTH "safari" and
--- "step" in the key name even when looking inside `save.safari` --  but
--- a field nested under a table already called `safari` would realistically
--- just be named "steps" or "remaining", with no need to repeat "safari"
--- in its own key. That made the nested branch dead: it could only ever
--- match a key that renamed itself redundantly, which was never in scope
--- to begin with. Now the "safari" requirement only applies to the
--- top-level (unscoped) search; anything inside save.safari only has to
--- look like a step counter.
---
 -- Once this is confirmed for real (see _debugSafariCandidates below),
 -- fill in CONFIRMED_FIELD / CONFIRMED_CONTAINER and delete the search +
 -- debug path -- they're scaffolding, not the intended long-term shape.
@@ -230,7 +228,15 @@ end
 -- contain the words "Safari Zone" in its formatted name).
 function GameService:isInSafariZone()
     local mapId = self:getCurrentMapId()
-    return mapId ~= nil and mapId:match("^SAFARI_ZONE") ~= nil
+    local inZone = mapId ~= nil and mapId:match("^SAFARI_ZONE") ~= nil
+    if inZone and mapId ~= self._lastSafariMapId then
+        self._lastSafariMapId = mapId
+        local log = self._locator:resolve("LogService")
+        if log then log:info("SafariZone DEBUG: entered mapId=%s", tostring(mapId)) end
+    elseif not inZone then
+        self._lastSafariMapId = nil
+    end
+    return inZone
 end
 
 function GameService:isInGame()
@@ -263,12 +269,24 @@ function GameService:isMenuOpen()
     local top = stk.states[#stk.states]
     if type(top) ~= "table" then return false end
 
-    if top._isMenuOpen ~= nil then
-        return top._isMenuOpen
+    -- KCL's own settings screen (overlay ON/OFF, topbar position) should
+    -- never hide the overlay -- the whole point of those rows is to
+    -- preview live while you're on the screen that sets them.
+    if top.kclSettingsScreen then return false end
+
+    local cached = self._menuOpenCache[top]
+    if cached ~= nil then
+        return cached
     end
 
-    local isMenuOpen = top.items ~= nil and top.index ~= nil
-    top._isMenuOpen = isMenuOpen
+    -- Anything pushed on top of the overworld/battle state is some kind
+    -- of menu -- Start menu list, Pokedex, Party, Bag, Save flow, PC, or
+    -- another mod's own screen. Absence of the overworld/battle markers
+    -- (same shape isInGame checks above) is the signal, rather than
+    -- matching one specific menu's shape, which only ever caught the
+    -- flat Start-menu list and missed every screen opened from it.
+    local isMenuOpen = top.map == nil and not (top.enemy ~= nil and top.player ~= nil)
+    self._menuOpenCache[top] = isMenuOpen
     return isMenuOpen
 end
 
@@ -294,6 +312,29 @@ end
 
 function GameService:getTypeChart()
     return Helpers.safeRequire("src.battle.TypeChart")
+end
+
+-- Added when PCService's and SettingsScreen's own direct requires of these
+-- were found to bypass this boundary (see CODE_REVIEW.md). Helpers.safeRequire
+-- caches by path, so this is cheap to call repeatedly.
+function GameService:getBoxesModule()
+    return Helpers.safeRequire("src.pokemon.Boxes")
+end
+
+function GameService:getPartyModule()
+    return Helpers.safeRequire("src.pokemon.Party")
+end
+
+function GameService:getBagModule()
+    return Helpers.safeRequire("src.inventory.Bag")
+end
+
+function GameService:getOptionRows()
+    return Helpers.safeRequire("src.ui.OptionRows")
+end
+
+function GameService:getPaletteFX()
+    return Helpers.safeRequire("src.render.PaletteFX")
 end
 
 return GameService

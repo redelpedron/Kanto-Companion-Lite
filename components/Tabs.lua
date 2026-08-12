@@ -5,6 +5,7 @@ local Colors = require("util.Colors")
 
 local Tabs = setmetatable({}, { __index = Component })
 Tabs.__index = Tabs
+Tabs.__name = "Tabs"
 Tabs.needs = { "ConfigService", "FontService", "EventBus" }
 
 function Tabs.new(locator, props)
@@ -26,17 +27,17 @@ function Tabs:init()
     -- so tab taps underneath it must be ignored.
     self:_listen("modal.opened", function(self2) self2._modalBlocking = true end)
     self:_listen("modal.closed", function(self2) self2._modalBlocking = false end)
-    self:_listen("input.pressed", function(self2, x, y)
+    self:_listen("input.pressed", function(self2, x, y, consume)
         if self2._modalBlocking then return end
         for _, box in ipairs(self2.hitBoxes) do
             if x >= box.x and x <= box.x + box.w and y >= box.y and y <= box.y + box.h then
                 self2.activeIdx = box.idx
                 local bus = self2:_service("EventBus")
                 bus:publish(self2._changeEvent, box.idx, self2.tabs[box.idx])
-                return true
+                if consume then consume() end
+                return
             end
         end
-        return false
     end)
 end
 

@@ -5,7 +5,12 @@ local Colors = require("util.Colors")
 
 local ExpBar = setmetatable({}, { __index = Component })
 ExpBar.__index = ExpBar
-ExpBar.needs = { "ConfigService", "Colors" }
+ExpBar.__name = "ExpBar"
+-- Colors (imported above) is a plain util module, not a locator service -
+-- it belongs in requires, not here. See PokemonPanel.lua for how ExpBar is
+-- actually constructed (bypasses Lifecycle, so .needs isn't checked today,
+-- but keep this accurate in case that changes).
+ExpBar.needs = { "ConfigService" }
 
 function ExpBar.new(locator, props)
     local self = setmetatable(Component.new(locator, props), ExpBar)

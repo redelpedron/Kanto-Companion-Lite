@@ -6,7 +6,39 @@ local TypeColors = require("util.TypeColors")
 
 local EnemyPanel = setmetatable({}, { __index = Component })
 EnemyPanel.__index = EnemyPanel
+EnemyPanel.__name = "EnemyPanel"
 EnemyPanel.needs = { "ConfigService", "FontService", "SpriteService", "TypeEffectiveness", "CatchRate", "GameService" }
+
+-- ---- Layout constants shared between the real draw (_drawContent /
+-- draw()) and the wrap-height size prediction (_contentHeight below).
+-- Two groups:
+--  - mode-invariant literals: identical in both two-column and
+--    single-panel layout, so _drawContent hardcodes them directly rather
+--    than threading them through geom.
+--  - SINGLE.*: single-panel-only geom values (these DO differ from the
+--    two-column layout's own literals in _drawTwoColumn, by design).
+-- Previously each of these existed as a bare number in both _drawContent
+-- and a second, separately-typed copy in _contentHeight; changing one
+-- without the other would silently desync predicted vs. actual panel
+-- height. Naming them here means there's exactly one place to change.
+local CAPTION_H  = 16  -- gap after "Wild/Trainer Battle" caption
+local HP_ROW_GAP = 12  -- gap after HP bar row
+local MOVE_LABEL_H = 12 -- "YOUR MOVE" label row above the move grid
+local MOVES_H    = 32  -- 2x2 move grid height
+local NO_MOVES_H = 14  -- "No move data" row height
+local CATCH_GAP  = 4   -- gap before catch-rate section when crGeom.startY is nil (single-panel only)
+
+local SINGLE = {
+    nameX         = 48,
+    spriteScale   = 36,
+    ballRadius    = 5,
+    ballOffset    = 12,
+    ballDotRadius = 2,
+    nameFontSize  = 13,
+    typeSpacing   = 14,
+    levelSpacing  = 20,
+    catchRowH     = 14,
+}
 
 function EnemyPanel.new(locator, props)
     local self = setmetatable(Component.new(locator, props), EnemyPanel)
@@ -31,18 +63,18 @@ function EnemyPanel:_contentHeight(w)
     if not self.enemy then
         return 38
     end
-    local h = 6 + 16
-    h = h + 20
-    h = h + 14
-    h = h + 12
+    local h = 6 + CAPTION_H
+    h = h + SINGLE.levelSpacing
+    h = h + SINGLE.typeSpacing
+    h = h + HP_ROW_GAP
     local active = self.activeMon
     if active and active.moves and #active.moves > 0 then
-        h = h + 32
+        h = h + MOVE_LABEL_H + MOVES_H
     else
-        h = h + 14
+        h = h + NO_MOVES_H
     end
-    h = h + 4
-    h = h + 14 -- catch-rate section header row ("CATCH RATE" or "Can't be caught")
+    h = h + CATCH_GAP
+    h = h + SINGLE.catchRowH -- catch-rate section header row ("CATCH RATE" or "Can't be caught")
     if not self.trainerName then
         -- Trainer's mons can never be caught (Gen 1 rule), so in a
         -- trainer battle we only ever draw the one header-row note above
@@ -52,11 +84,11 @@ function EnemyPanel:_contentHeight(w)
         for _, ballId in ipairs(balls) do
             if (self.inventory[ballId] or 0) > 0 then
                 hasAny = true
-                h = h + 14
+                h = h + SINGLE.catchRowH
             end
         end
         if not hasAny then
-            h = h + 14
+            h = h + SINGLE.catchRowH
         end
     end
     h = h + 8
@@ -97,8 +129,7 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
     Colors.set(cfg.COL.dim, 1)
     -- FIX v2.1.30: was hardcoded "Wild Battle" even for trainer fights.
     love.graphics.print(self.trainerName and "Trainer Battle" or "Wild Battle", math.floor(x+8), math.floor(cy))
-    cy = cy + 16
-
+    cy = cy + CAPTION_H
     local img = sprites:getSprite(en.species, self._props.pokemonData)
     if img then
         local iw, ih = img:getDimensions()
@@ -148,7 +179,7 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
         for _, t2 in ipairs(en.types) do
             local tname = TypeColors.normalize(t2)
             if tname ~= "" then
-                Colors.set(cfg.TYPE[tname] or cfg.COL.dim, 1)
+                Colors.set(TypeColors.getColor(tname), 1)
                 love.graphics.print(tname, math.floor(tx), math.floor(cy))
                 tx = tx + f9:getWidth(tname .. " ")
             end
@@ -170,10 +201,14 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
     love.graphics.setFont(f9b)
     Colors.set(cfg.COL.text, 1)
     love.graphics.print(hpStr, math.floor(x+nameColW-8-f9b:getWidth(hpStr)), math.floor(cy))
-    cy = cy + 12
-
+    cy = cy + HP_ROW_GAP
     local active = self.activeMon
     if active and active.moves and #active.moves > 0 then
+        love.graphics.setFont(f10)
+        Colors.set(cfg.COL.dim, 1)
+        love.graphics.print("YOUR MOVE", math.floor(x+8), math.floor(cy))
+        cy = cy + MOVE_LABEL_H
+
         -- integer column width prevents fractional pixel misalignment
         local colW = math.floor((nameColW - 16) / 2)
         local moveH = 14
@@ -208,18 +243,18 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
             -- PP right-aligned to consistent column edge
             love.graphics.print(ppStr, math.floor(mx + colW - 8 - f9b:getWidth(ppStr)), my)
         end
-        cy = cy + 32
+        cy = cy + MOVES_H
     else
         love.graphics.setFont(f10)
         Colors.set(cfg.COL.dim, 1)
         love.graphics.print("No move data", math.floor(x+8), math.floor(cy))
-        cy = cy + 14
+        cy = cy + NO_MOVES_H
     end
 
     -- ---- Catch rate section ----
     local crGeom = geom.catchRate
     local crX, crW = crGeom.x, crGeom.w
-    local ry = crGeom.startY or (cy + 4)
+    local ry = crGeom.startY or (cy + CATCH_GAP)
     if crGeom.bottomBound and ry + 14 > crGeom.bottomBound then return end
 
     love.graphics.setFont(f10)
@@ -331,15 +366,15 @@ function EnemyPanel:draw(ctx)
 
     self:_drawContent(cfg, fonts, sprites, te, cr, {
         x = x, y = y, w = w,
-        nameX = 48,
-        spriteScale = 36,
-        ballRadius = 5,
-        ballOffset = 12,
-        ballDotRadius = 2,
-        nameFontSize = 13,
-        typeSpacing = 14,
-        levelSpacing = 20,
-        catchRate = { x = x, w = w, startY = nil, rowH = 14, bottomBound = y + drawH - 4 },
+        nameX = SINGLE.nameX,
+        spriteScale = SINGLE.spriteScale,
+        ballRadius = SINGLE.ballRadius,
+        ballOffset = SINGLE.ballOffset,
+        ballDotRadius = SINGLE.ballDotRadius,
+        nameFontSize = SINGLE.nameFontSize,
+        typeSpacing = SINGLE.typeSpacing,
+        levelSpacing = SINGLE.levelSpacing,
+        catchRate = { x = x, w = w, startY = nil, rowH = SINGLE.catchRowH, bottomBound = y + drawH - 4 },
     })
 end
 

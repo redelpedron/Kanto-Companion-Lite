@@ -4,6 +4,7 @@ local Component = require("core.Component")
 
 local CatchRate = setmetatable({}, { __index = Component })
 CatchRate.__index = CatchRate
+CatchRate.__name = "CatchRate"
 CatchRate.needs = { "ConfigService" }
 
 function CatchRate.new(locator, props)

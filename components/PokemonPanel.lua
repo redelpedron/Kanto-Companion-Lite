@@ -7,6 +7,7 @@ local TypeColors = require("util.TypeColors")
 
 local PokemonPanel = setmetatable({}, { __index = Component })
 PokemonPanel.__index = PokemonPanel
+PokemonPanel.__name = "PokemonPanel"
 PokemonPanel.needs = { "ConfigService", "FontService", "SpriteService", "TypeEffectiveness" }
 
 function PokemonPanel.new(locator, props)
@@ -63,10 +64,17 @@ end
 -- =======================================================================
 
 function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
-    local headerH = cfg.PARTY_HEADER_H
+    -- showTabHeader means the landscape tab strip above already shows the
+    -- title, so this panel draws no inline label (see draw() below) and
+    -- doesn't need PARTY_HEADER_H's room reserved for one -- that gap was
+    -- pure dead space once the label stopped being drawn there. Same for
+    -- the bottom pad: only meaningful as breathing room below a label-less
+    -- edge, not a spacing rule the rows themselves need.
+    local headerH = self._props.showTabHeader and 0 or cfg.PARTY_HEADER_H
+    local padB    = self._props.showTabHeader and 0 or cfg.PARTY_PANEL_PAD_B
     local rowH    = cfg.PARTY_ROW_H
     local cy      = y + headerH
-    local maxCy   = y + h - cfg.PARTY_PANEL_PAD_B
+    local maxCy   = y + h - padB
 
     if #self.party == 0 and self._props.emptyMessage then
         local f11 = fonts:getFont(11)
@@ -110,7 +118,7 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
             for _, t2 in ipairs(m.types) do
                 local tname = TypeColors.normalize(t2)
                 if tname ~= "" then
-                    Colors.set(cfg.TYPE[tname] or cfg.COL.dim, 1)
+                    Colors.set(TypeColors.getColor(tname), 1)
                     love.graphics.print(tname, math.floor(tx), math.floor(cy+1))
                     tx = tx + f9:getWidth(tname .. " ")
                 end
@@ -123,15 +131,18 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
         love.graphics.print(lvStr, math.floor(x+w-8-f10b:getWidth(lvStr)), math.floor(cy))
         -- v2.1.35: maxhp is nil for a benched rival-roster mon (its HP
         -- genuinely isn't known until it's sent into battle -- see
-        -- GameDataSystem). Render that as "unknown" instead of a fake
-        -- 0/1, which read as the Pokemon being nearly fainted.
+        -- GameDataSystem). The number stays "?" below since we don't know
+        -- the real total, but the bar itself can still be drawn full: a
+        -- mon that's never been sent out has never taken a hit (Gen 1
+        -- doesn't damage benched mons), so it genuinely IS at 100% HP --
+        -- this isn't a guess, unlike the old fake-0/1 fill it replaced.
         local known = maxhp ~= nil
-        local frac = known and Math.clamp((hp or 0) / math.max(1, maxhp), 0, 1) or 0
+        local frac = known and Math.clamp((hp or 0) / math.max(1, maxhp), 0, 1) or 1
         local barW = w - 44 - 50
         local barY = cy + 11
         Colors.set({0.12,0.12,0.14}, 1)
         love.graphics.rectangle("fill", math.floor(x+36), math.floor(barY), math.floor(barW), 4)
-        if known and frac > 0 then
+        if frac > 0 then
             Colors.set(Colors.hpColor(frac), 1)
             love.graphics.rectangle("fill", math.floor(x+36), math.floor(barY), math.floor(barW*frac), 4)
         end
@@ -232,7 +243,9 @@ function PokemonPanel:draw(ctx)
     local drawH = h
     if not ctx.compact then
         local rowCount = math.max(1, math.min(#self.party, cfg.PARTY_MAX))
-        local neededH = cfg.PARTY_HEADER_H + rowCount * cfg.PARTY_ROW_H + cfg.PARTY_PANEL_PAD_B
+        local headerH = self._props.showTabHeader and 0 or cfg.PARTY_HEADER_H
+        local padB    = self._props.showTabHeader and 0 or cfg.PARTY_PANEL_PAD_B
+        local neededH = headerH + rowCount * cfg.PARTY_ROW_H + padB
         drawH = math.min(h, neededH)
     end
 
@@ -248,9 +261,9 @@ function PokemonPanel:draw(ctx)
     -- v2.1.40: skip this label whenever the landscape partyTabs strip
     -- above is already showing the same "Party"/trainer-name text as a
     -- tab (see layouts/Landscape.lua's showTabHeader) -- redrawing it
-    -- here too was a plain duplicate. Still drawn in portrait, and in
-    -- landscape's untabbed fallback (no active trainer battle), where
-    -- this is the only place that label appears.
+    -- here too was a plain duplicate. Landscape always has that tab strip
+    -- now (see AppController:_applyPartyLayout), so this only ever draws
+    -- in portrait, which has no tab strip of its own.
     if not self._props.showTabHeader then
         love.graphics.print(self._props.label or "Party", math.floor(x+8), math.floor(y+4))
     end

@@ -19,6 +19,7 @@ local ScrollableMixin = require("util.ScrollableMixin")
 
 local PCPopup = setmetatable({}, { __index = Component })
 PCPopup.__index = PCPopup
+PCPopup.__name = "PCPopup"
 PCPopup.needs = { "ConfigService", "FontService", "GameService", "PCService", "SpriteService", "EventBus" }
 Helpers.mixin(PCPopup, ScrollableMixin)
 
@@ -422,13 +423,8 @@ function PCPopup:_drawItemList(p, cfg, fonts, dItem, side, title, itemsTable, sl
     -- ADDED: Calculate content height for scrollbar
     local rowH = 22
     local headerH = 15  -- Section header height
-    local contentHeight = 0
     local sections = { { title = "BALLS", rows = balls }, { title = "HEALING", rows = heals }, { title = "OTHER", rows = other } }
-    for _, sec in ipairs(sections) do
-        if #sec.rows > 0 then
-            contentHeight = contentHeight + headerH + (#sec.rows * rowH) + 4  -- 4 = spacing
-        end
-    end
+    local contentHeight = Helpers.sectionedContentHeight(sections, rowH, headerH, 4)
     
     local viewportHeight = p.h - 32  -- Available space for scrolling (bottom margin)
     local scroll, maxScroll = self:_scrollClamp(contentHeight, viewportHeight, side)

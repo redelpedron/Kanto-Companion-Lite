@@ -16,13 +16,6 @@ function PCService.new(locator)
     self._locator = locator
     self._gameService = nil  -- Lazy-loaded on first use
 
-    -- Lazily pcall-required engine modules (same pattern as
-    -- Helpers.safeRequire), cached after the first attempt either way so a
-    -- missing module doesn't retry every call.
-    self._boxesMod, self._boxesTried = nil, false
-    self._partyMod, self._partyTried = nil, false
-    self._bagMod, self._bagTried = nil, false
-
     self._modalState = nil  -- lightweight screen pushed while the popup is open
     return self
 end
@@ -39,30 +32,15 @@ function PCService:getSave()
 end
 
 function PCService:_boxes()
-    if not self._boxesTried then
-        self._boxesTried = true
-        local ok, m = pcall(require, "src.pokemon.Boxes")
-        self._boxesMod = ok and m or nil
-    end
-    return self._boxesMod
+    return self:_getGameService():getBoxesModule()
 end
 
 function PCService:_party()
-    if not self._partyTried then
-        self._partyTried = true
-        local ok, m = pcall(require, "src.pokemon.Party")
-        self._partyMod = ok and m or nil
-    end
-    return self._partyMod
+    return self:_getGameService():getPartyModule()
 end
 
 function PCService:_bag()
-    if not self._bagTried then
-        self._bagTried = true
-        local ok, m = pcall(require, "src.inventory.Bag")
-        self._bagMod = ok and m or nil
-    end
-    return self._bagMod
+    return self:_getGameService():getBagModule()
 end
 
 -- ======================================================================

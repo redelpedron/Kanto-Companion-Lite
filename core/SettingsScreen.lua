@@ -9,7 +9,7 @@ local SCREEN_ID = "KantoCompanionLiteSettings"
 local M = {}
 M.SCREEN_ID = SCREEN_ID
 
-function M.install(mod, saveSvc)
+function M.install(mod, saveSvc, locator)
     -- Each row only needs a label, a way to read/flip its own persisted
     -- value, and the info text A shows. Unlike qol_options.lua's generic
     -- "choice" schema (used there because some of its rows have more than
@@ -40,7 +40,8 @@ function M.install(mod, saveSvc)
     }
 
     local function makeScreen(game)
-        local OptionRows = require("src.ui.OptionRows")
+        local gameService = locator:resolve("GameService")
+        local OptionRows = gameService:getOptionRows()
 
         local screen = {
             game = game,
@@ -48,10 +49,11 @@ function M.install(mod, saveSvc)
             index = 1,
             scroll = 0,
             isOpaque = true,
+            kclSettingsScreen = true,
         }
 
         function screen:sgbPalettes(g)
-            return require("src.render.PaletteFX").wholeNamed(g.data, "MEWMON")
+            return gameService:getPaletteFX().wholeNamed(g.data, "MEWMON")
         end
 
         function screen:update()

@@ -5,8 +5,23 @@ local ScrollableMixin = require("util.ScrollableMixin")
 
 local RoutePanel = setmetatable({}, { __index = Component })
 RoutePanel.__index = RoutePanel
+RoutePanel.__name = "RoutePanel"
 RoutePanel.needs = { "ConfigService", "FontService", "SpriteService", "EventBus" }
 Helpers.mixin(RoutePanel, ScrollableMixin)
+
+-- ---- Layout constants shared between the real draw (draw()'s drawSec)
+-- and the two size predictions below (_wrappedHeight, _contentHeight).
+-- Previously each of the three kept its own separately-typed copy of
+-- these same numbers (and _wrappedHeight/_contentHeight each re-derived
+-- the section count with an identical five-line block). Naming them once
+-- here means a spacing change can't leave prediction and draw disagreeing.
+local MAX_VISIBLE_ENTRIES = 5
+local ENTRY_H = 18              -- per-species row height
+local SEC_HEADER_H = 16         -- gap after a section's title row ("Grass 25%" etc)
+local SEC_SPACING = 4           -- gap after a section's last row
+local TOP_PAD = 8
+local BOT_PAD = 4
+local NO_ENCOUNTERS_ROW_H = 14  -- height of the single "No wild encounters" fallback row
 
 function RoutePanel.new(locator, props)
     local self = setmetatable(Component.new(locator, props), RoutePanel)
@@ -43,29 +58,28 @@ function RoutePanel:_countEntries()
     return n
 end
 
+-- How many of grass/water sections will actually draw (i.e. have at least
+-- one species). Was previously re-derived identically inside both
+-- _wrappedHeight and _contentHeight.
+function RoutePanel:_sectionCount()
+    if not self.route then return 0 end
+    local sections = 0
+    if self.route.grass and self.route.grass.species and #self.route.grass.species > 0 then sections = sections + 1 end
+    if self.route.water and self.route.water.species and #self.route.water.species > 0 then sections = sections + 1 end
+    return sections
+end
+
 -- v1.0.65: compute wrapped height (capped at 5 visible entries)
 function RoutePanel:_wrappedHeight(w, h)
-    local cfg = self:_service("ConfigService")
-    local MAX_VISIBLE = 5
-    local ENTRY_H = 18
-    local SEC_HEADER_H = 16
-    local SEC_SPACING = 4
-    local TOP_PAD = 8
-    local BOT_PAD = 4
-
     local totalEntries = self:_countEntries()
-    local sections = 0
-    if self.route then
-        if self.route.grass and self.route.grass.species and #self.route.grass.species > 0 then sections = sections + 1 end
-        if self.route.water and self.route.water.species and #self.route.water.species > 0 then sections = sections + 1 end
-    end
+    local sections = self:_sectionCount()
 
-    local visibleEntries = math.min(totalEntries, MAX_VISIBLE)
+    local visibleEntries = math.min(totalEntries, MAX_VISIBLE_ENTRIES)
     local neededH = TOP_PAD + (sections * SEC_HEADER_H) + (visibleEntries * ENTRY_H) + (sections * SEC_SPACING) + BOT_PAD
 
     -- If no encounters, show "No wild encounters" row
     if totalEntries == 0 then
-        neededH = TOP_PAD + 14 + BOT_PAD
+        neededH = TOP_PAD + NO_ENCOUNTERS_ROW_H + BOT_PAD
     end
 
     return math.min(h, neededH)
@@ -73,17 +87,8 @@ end
 
 -- v1.0.65: total content height for scroll calculation
 function RoutePanel:_contentHeight()
-    local SEC_HEADER_H = 16
-    local ENTRY_H = 18
-    local SEC_SPACING = 4
-    local TOP_PAD = 8
-
     local totalEntries = self:_countEntries()
-    local sections = 0
-    if self.route then
-        if self.route.grass and self.route.grass.species and #self.route.grass.species > 0 then sections = sections + 1 end
-        if self.route.water and self.route.water.species and #self.route.water.species > 0 then sections = sections + 1 end
-    end
+    local sections = self:_sectionCount()
 
     return TOP_PAD + (sections * SEC_HEADER_H) + (totalEntries * ENTRY_H) + (sections * SEC_SPACING)
 end
@@ -93,8 +98,8 @@ function RoutePanel:_handleClick(x, y, consume)
     local px, py, pw, ph = self._props.x, self._props.y, self._props.w, self._props.h
 
     -- Hit zone: scrollbar track area
-    local viewportHeight = ph - 12
-    if self:_scrollTryStartDrag(x, y, { x = px, y = py + 8, w = pw, h = viewportHeight }) then
+    local viewportHeight = ph - (TOP_PAD + BOT_PAD)
+    if self:_scrollTryStartDrag(x, y, { x = px, y = py + TOP_PAD, w = pw, h = viewportHeight }) then
         if consume then consume() end
         return true
     end
@@ -133,19 +138,19 @@ function RoutePanel:draw(ctx)
 
     -- Scroll metrics
     local contentHeight = self:_contentHeight()
-    local viewportHeight = drawH - 12
+    local viewportHeight = drawH - (TOP_PAD + BOT_PAD)
     local scrollOffset, maxScroll = self:_scrollClamp(contentHeight, viewportHeight)
 
     -- Apply scissor
     love.graphics.setScissor(
         math.floor(x),
-        math.floor(y + 8),
+        math.floor(y + TOP_PAD),
         math.ceil(w),
         math.ceil(viewportHeight)
     )
 
-    local cy = y + 8 - scrollOffset
-    local maxCy = y + drawH - 4
+    local cy = y + TOP_PAD - scrollOffset
+    local maxCy = y + drawH - BOT_PAD
 
     local f9 = fonts:getFont(9)
     love.graphics.setFont(f9)
@@ -159,14 +164,14 @@ function RoutePanel:draw(ctx)
 
     local function drawSec(title, tab)
         if not tab or not tab.species or #tab.species == 0 then return end
-        if cy + 18 > maxCy then return end
+        if cy + ENTRY_H > maxCy then return end  -- conservative: don't orphan a header with no room for a row under it
         local f10 = fonts:getFont(10)
         love.graphics.setFont(f10)
         Colors.set(cfg.COL.dim, 1)
         love.graphics.print(title .. " " .. tab.rate .. "%", math.floor(x+8), math.floor(cy))
-        cy = cy + 16
+        cy = cy + SEC_HEADER_H
         for _, sp in ipairs(tab.species) do
-            if cy + 16 > maxCy then break end
+            if cy + SEC_HEADER_H > maxCy then break end
             local img = sprites:getSprite(sp.species, self._props.pokemonData)
             if img then
                 local iw, ih = img:getDimensions()
@@ -197,9 +202,9 @@ function RoutePanel:draw(ctx)
             love.graphics.print(sp.pct .. "%", math.floor(pctColRight - f9:getWidth(sp.pct.."%")), math.floor(cy))
             Colors.set(cfg.COL.dim, 1)
             love.graphics.print(lv, math.floor(lvColRight - f9:getWidth(lv)), math.floor(cy))
-            cy = cy + 18
+            cy = cy + ENTRY_H
         end
-        cy = cy + 4
+        cy = cy + SEC_SPACING
     end
 
     drawSec("Grass", self.route.grass)
@@ -208,7 +213,7 @@ function RoutePanel:draw(ctx)
     local hasAny = (self.route.grass and self.route.grass.species and #self.route.grass.species > 0)
                 or (self.route.water and self.route.water.species and #self.route.water.species > 0)
     if not hasAny then
-        if cy + 14 <= maxCy then
+        if cy + NO_ENCOUNTERS_ROW_H <= maxCy then
             local f10 = fonts:getFont(10)
             love.graphics.setFont(f10)
             Colors.set(cfg.COL.dim, 1)
@@ -220,7 +225,7 @@ function RoutePanel:draw(ctx)
     love.graphics.setScissor()
 
     self:_scrollDrawBar(
-        { x = x, y = y + 8, w = w, h = viewportHeight },
+        { x = x, y = y + TOP_PAD, w = w, h = viewportHeight },
         contentHeight, viewportHeight, maxScroll, scrollOffset,
         { track = cfg.COL.border, thumb = cfg.COL.hi, thumbActive = cfg.COL.gold },
         Colors

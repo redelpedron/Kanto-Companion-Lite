@@ -121,12 +121,24 @@ function GameDataSystem:_buildRival(ctx)
             hp     = enemyActiveMon.hp
             maxhp  = enemyActiveMon.stats and enemyActiveMon.stats.hp
             status = enemyActiveMon.status
-            -- v2.1.38: remember what we just saw for this slot, so it
-            -- doesn't fall back to "unknown" once the mon is benched
-            -- again -- most importantly when it's benched *because it
-            -- just fainted*, which used to redraw as "?" instead of
-            -- staying at 0/maxhp.
-            self._rivalKnown[i] = { hp = hp, maxhp = maxhp, status = status }
+            -- DEBUG HYPOTHESIS: guards against a suspected one-tick window
+            -- during the faint->switch animation where the live battler
+            -- struct already holds the incoming mon's full HP before
+            -- species/level catch up, so `isActive` still matches this
+            -- (fainted) slot for one more poll. Unverified against the
+            -- live engine -- if the flash persists, remove this guard,
+            -- it isn't the cause.
+            local prev = self._rivalKnown[i]
+            if prev and prev.hp == 0 and maxhp ~= nil and hp == maxhp then
+                hp, maxhp, status = prev.hp, prev.maxhp, prev.status
+            else
+                -- v2.1.38: remember what we just saw for this slot, so it
+                -- doesn't fall back to "unknown" once the mon is benched
+                -- again -- most importantly when it's benched *because it
+                -- just fainted*, which used to redraw as "?" instead of
+                -- staying at 0/maxhp.
+                self._rivalKnown[i] = { hp = hp, maxhp = maxhp, status = status }
+            end
         else
             local known = self._rivalKnown[i]
             hp     = known and known.hp

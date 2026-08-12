@@ -138,8 +138,22 @@ function Helpers.drawIcon(name, cx, cy, size, bg)
     fn(cx, cy, size, bg)
 end
 
+-- Successful requires are already cached by Lua's own package.loaded, but a
+-- FAILED require (module genuinely absent) is not cached anywhere, so every
+-- caller re-walks the package search path on every single call. Cache both
+-- outcomes here so callers (e.g. GameService's per-tick lookups) don't pay
+-- that cost repeatedly. MISSING is a distinct sentinel from nil so "never
+-- tried" and "tried, confirmed absent" aren't ambiguous.
+local MISSING = {}
+local _requireCache = {}
+
 function Helpers.safeRequire(path)
+    local cached = _requireCache[path]
+    if cached ~= nil then
+        return cached ~= MISSING and cached or nil
+    end
     local ok, m = pcall(require, path)
+    _requireCache[path] = ok and m or MISSING
     return ok and m or nil
 end
 
@@ -231,6 +245,32 @@ function Helpers.categorizeItems(dItem, itemsTable)
     table.sort(heals, byName)
     table.sort(other, byName)
     return balls, heals, other
+end
+
+-- Sum content height across a list of {rows = {...}, ...} sections -- the
+-- shape both ItemsPanel and PCPopup's item lists use after categorizeItems
+-- (BALLS/HEALING/OTHER). Empty sections contribute nothing. Was previously
+-- reimplemented independently in three places: ItemsPanel's wrap-height
+-- size prediction, ItemsPanel's real scroll content height, and PCPopup's
+-- _drawItemList -- the last of those uses different rowH/headerH (its
+-- modal has bigger rows), which is real, deliberate variability, but the
+-- formula shape was identical in all three.
+--
+-- maxRows caps the TOTAL row count summed across all sections (not
+-- per-section) before multiplying by rowH -- this is what lets
+-- ItemsPanel's wrap-height prediction (capped at ~9 visible rows) share
+-- this same helper with the real, uncapped content-height calculations.
+function Helpers.sectionedContentHeight(sections, rowH, headerH, spacing, maxRows)
+    local nonEmptyCount = 0
+    local totalRows = 0
+    for _, sec in ipairs(sections) do
+        if #sec.rows > 0 then
+            nonEmptyCount = nonEmptyCount + 1
+            totalRows = totalRows + #sec.rows
+        end
+    end
+    local rows = maxRows and math.min(totalRows, maxRows) or totalRows
+    return (nonEmptyCount * (headerH + spacing)) + (rows * rowH)
 end
 
 return Helpers

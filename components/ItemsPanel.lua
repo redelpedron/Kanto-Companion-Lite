@@ -5,6 +5,7 @@ local ScrollableMixin = require("util.ScrollableMixin")
 
 local ItemsPanel = setmetatable({}, { __index = Component })
 ItemsPanel.__index = ItemsPanel
+ItemsPanel.__name = "ItemsPanel"
 ItemsPanel.needs = { "ConfigService", "FontService", "GameService", "EventBus" }
 Helpers.mixin(ItemsPanel, ScrollableMixin)
 
@@ -80,25 +81,21 @@ function ItemsPanel:draw(ctx)
     local x, y, w, h = ctx.x, ctx.y, ctx.w, ctx.h
 
     -- v1.0.65: cap max height to ~9 items worth (landscape wrap mode)
+    local dItem = game:getItemData()
+    local balls, heals, other = Helpers.categorizeItems(dItem, self.inventory)
+    local sections = {
+        { name = "BALLS", rows = balls },
+        { name = "HEALING", rows = heals },
+        { name = "OTHER", rows = other },
+    }
+
     local drawH = h
     if ctx.wrapHeight then
         local itemHeight = 14
         local headerHeight = 16
-        local maxItems = 9
-        -- Count total items
-        local totalItems = 0
-        for _, count in pairs(self.inventory) do
-            if type(count) == "number" and count > 0 then
-                totalItems = totalItems + 1
-            end
-        end
-        local sections = 0
-        local dItem = game:getItemData()
-        local balls, heals, other = Helpers.categorizeItems(dItem, self.inventory)
-        if #balls > 0 then sections = sections + 1 end
-        if #heals > 0 then sections = sections + 1 end
-        if #other > 0 then sections = sections + 1 end
-        local neededH = 24 + (sections * headerHeight) + (math.min(totalItems, maxItems) * itemHeight) + (sections * 4) + 8
+        local maxItems = 6
+        local totalItems = #balls + #heals + #other
+        local neededH = 24 + Helpers.sectionedContentHeight(sections, itemHeight, headerHeight, 4, maxItems) + 8
         if totalItems == 0 then
             neededH = 24 + 14 + 8
         end
@@ -111,17 +108,9 @@ function ItemsPanel:draw(ctx)
     Colors.set(cfg.COL.border, 0.3)
     love.graphics.rectangle("line", math.floor(x)+0.5, math.floor(y)+0.5, math.floor(w)-1, math.floor(drawH)-1)
 
-    local f13 = fonts:getFont(13)
-    love.graphics.setFont(f13)
-    Colors.set(cfg.COL.text, 1)
-    love.graphics.print("Bag", math.floor(x+8), math.floor(y+6))
-
     local btnW, btnH = 60, 20
     local btnX = x + w - btnW - 8
     local btnY = y + 4
-
-    local dItem = game:getItemData()
-    local balls, heals, other = Helpers.categorizeItems(dItem, self.inventory)
 
     if not self._inBattle then
         Colors.set(cfg.COL.hi, 0.6)
@@ -151,20 +140,9 @@ function ItemsPanel:draw(ctx)
     local headerHeight = 16
     local startY = y + 24
     local viewportHeight = drawH - 28
-    
-    local contentHeight = 0
-    local sections = {
-        { name = "BALLS", rows = balls },
-        { name = "HEALING", rows = heals },
-        { name = "OTHER", rows = other }
-    }
-    
-    for _, sec in ipairs(sections) do
-        if #sec.rows > 0 then
-            contentHeight = contentHeight + headerHeight + (#sec.rows * itemHeight) + 4
-        end
-    end
-    
+
+    local contentHeight = Helpers.sectionedContentHeight(sections, itemHeight, headerHeight, 4)
+
     -- Clamp scroll to valid range
     local scrollOffset, maxScroll = self:_scrollClamp(contentHeight, viewportHeight)
 
