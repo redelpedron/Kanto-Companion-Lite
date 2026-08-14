@@ -1,5 +1,3 @@
-
---- CatchRate: calculation component for catch probabilities.
 local Component = require("core.Component")
 
 local CatchRate = setmetatable({}, { __index = Component })

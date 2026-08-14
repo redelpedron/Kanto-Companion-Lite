@@ -1,5 +1,3 @@
-
---- SaveService: wraps mod.save with safe pcall access and event publishing.
 local SaveService = {}
 SaveService.__index = SaveService
 
@@ -9,6 +7,7 @@ function SaveService.new(locator)
     self._modSave = nil
     self._visible = true
     self._topBarBottom = false
+    self._showFps = true
     return self
 end
 
@@ -16,6 +15,7 @@ function SaveService:setModSave(modSave)
     self._modSave = modSave
     self:syncVisibility()
     self:syncTopBarBottom()
+    self:syncShowFps()
 end
 
 function SaveService:syncVisibility()
@@ -47,12 +47,6 @@ function SaveService:toggleVisible()
     self:setVisible(not self._visible)
 end
 
--- "Bottom Topbar" (landscape only): moves the landscape top bar from the
--- top of the screen to the bottom, directly above the reserved
--- touch-control strip. Portrait's stacked top bar is unaffected -- see
--- layouts/Landscape.lua and LayoutSystem, the only two places that read
--- this flag. Mirrors the visible/syncVisibility pattern above so both
--- settings persist and reload the same way.
 function SaveService:syncTopBarBottom()
     local ok, v = pcall(function()
         return self._modSave:get("topBarBottom", false)
@@ -80,6 +74,35 @@ end
 
 function SaveService:toggleTopBarBottom()
     self:setTopBarBottom(not self._topBarBottom)
+end
+
+function SaveService:syncShowFps()
+    local ok, v = pcall(function()
+        return self._modSave:get("showFps", true)
+    end)
+    self._showFps = ok and (v ~= false)
+    local bus = self._locator:resolve("EventBus")
+    bus:publish("fps.visibility.changed", self._showFps)
+end
+
+function SaveService:isFpsVisible()
+    return self._showFps
+end
+
+function SaveService:setFpsVisible(val)
+    local ok, err = pcall(function()
+        self._modSave:set("showFps", val)
+    end)
+    if ok then
+        self:syncShowFps()
+    else
+        local log = self._locator:resolve("LogService")
+        if log then log:error("SaveService:setFpsVisible: %s", tostring(err)) end
+    end
+end
+
+function SaveService:toggleFpsVisible()
+    self:setFpsVisible(not self._showFps)
 end
 
 return SaveService

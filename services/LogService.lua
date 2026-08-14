@@ -1,5 +1,3 @@
-
---- LogService: thin wrapper so core code can log without holding mod directly.
 local LogService = {}
 LogService.__index = LogService
 

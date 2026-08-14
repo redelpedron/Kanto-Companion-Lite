@@ -1,21 +1,10 @@
---- SettingsScreen: the "KANTO COMPANION LITE" pause-menu row now opens
--- this submenu instead of toggling ON/OFF directly (see AppController's
--- _wrapHooks). Each row here is its own persisted ON/OFF setting, toggled
--- with left/right, with A opening a one-line info TextBox -- the same
--- interaction pattern the quality_of_life mod's qol_options.lua uses for
--- its own "QUALITY OF LIFE" submenu.
 local SCREEN_ID = "KantoCompanionLiteSettings"
 
 local M = {}
 M.SCREEN_ID = SCREEN_ID
 
 function M.install(mod, saveSvc, locator)
-    -- Each row only needs a label, a way to read/flip its own persisted
-    -- value, and the info text A shows. Unlike qol_options.lua's generic
-    -- "choice" schema (used there because some of its rows have more than
-    -- two states, e.g. ON (BLACK)/ON (BLUE)), every setting here is a
-    -- plain ON/OFF, so a small fixed row list is simpler than building
-    -- out that same generic machinery for two booleans.
+
     local rows = {
         {
             label = "OVERLAY",
@@ -36,6 +25,16 @@ function M.install(mod, saveSvc, locator)
                 saveSvc:toggleTopBarBottom()
             end,
             description = "MOVES THE TOP BAR TO\nTHE BOTTOM OF THE\fSCREEN IN LANDSCAPE\nMODE ONLY. PORTRAIT\fIS NOT AFFECTED.",
+        },
+        {
+            label = "SHOW FPS",
+            value = function()
+                return saveSvc:isFpsVisible() and "ON" or "OFF"
+            end,
+            toggle = function()
+                saveSvc:toggleFpsVisible()
+            end,
+            description = "SHOWS OR HIDES THE\nFPS COUNTER IN THE\fTOP BAR.",
         },
     }
 

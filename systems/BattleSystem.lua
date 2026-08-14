@@ -34,16 +34,11 @@ function BattleSystem:update(dt)
             self.bus:publish("active_mon.changed", activeMon)
         end
 
-        -- Rival tab: live per-frame HP/status for whichever enemy mon is
-        -- currently out, same as active_mon.changed does for the player.
         local enemyActiveMon = self.battleService:getEnemyMon()
         if enemyActiveMon then
             self.bus:publish("enemy_active_mon.changed", enemyActiveMon)
         end
 
-        -- Rival tab label: update as soon as a trainer battle starts
-        -- (or a wild encounter begins with no trainer) rather than
-        -- waiting on GameDataSystem's slower 0.2s roster snapshot.
         local trainerName = self.battleService:getEnemyTrainerName()
         if trainerName ~= self._lastTrainerName then
             self.bus:publish("rival_trainer.updated", trainerName)

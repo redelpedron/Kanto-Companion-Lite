@@ -1,22 +1,14 @@
---- PCService: handles PC (Pokémon Storage) operations -- both the item
--- side (Bag <-> PC items) and the Pokémon side (Party <-> PC boxes).
--- Decouples all of this from GameService, which stays a plain, general
--- save/party/money adapter with no PC-specific knowledge. Every read *and*
--- write that touches PC storage, box contents, or party/box placement goes
--- through here so components never see game.save directly.
 local PCService = {}
 PCService.__index = PCService
 
--- Mirrors Kanto Companion's PC_ITEM_CAP -- the in-game PC item store caps
--- out at 50 distinct stacks.
 local PC_ITEM_CAP = 50
 
 function PCService.new(locator)
     local self = setmetatable({}, PCService)
     self._locator = locator
-    self._gameService = nil  -- Lazy-loaded on first use
+    self._gameService = nil
 
-    self._modalState = nil  -- lightweight screen pushed while the popup is open
+    self._modalState = nil
     return self
 end
 
@@ -43,17 +35,11 @@ function PCService:_bag()
     return self:_getGameService():getBagModule()
 end
 
--- ======================================================================
--- Items: Bag <-> PC
--- ======================================================================
-
--- Get all PC items as {itemId = count, ...}
 function PCService:getItems()
     local save = self:getSave()
     return (save and save.pcItems) or {}
 end
 
--- Get item count for a specific item in PC
 function PCService:getItemCount(itemId)
     local items = self:getItems()
     return items[itemId] or 0
@@ -75,13 +61,12 @@ end
 function PCService:bagSlotCount()
     local bag = self:_bag()
     local save = self:getSave()
-    -- Use Bag.slots() if available - this properly handles inventory addons
-    -- that extend capacity beyond the default 20 items
+
     if bag and bag.slots and save then
         local ok, n = pcall(bag.slots, save)
         if ok and type(n) == "number" then return n end
     end
-    -- Fallback: count unique item types (only if Bag module unavailable)
+
     local n = 0
     for _, q in pairs(self:getBagItems()) do
         if type(q) == "number" and q > 0 then n = n + 1 end
@@ -97,12 +82,6 @@ function PCService:pcSlotCount()
     return n
 end
 
--- Move the *entire* stack of `itemId` from one side ("bag"/"pc") to the
--- other. Mirrors Kanto Companion's doTransfer: enforces bag/PC capacity
--- and the 99-per-stack cap. Voxel has no scroll wheel to dial in a partial
--- quantity while holding, so unlike Kanto this always moves the whole
--- stack -- functionally the same outcome, just without a quantity picker.
--- Returns true, or false + a short reason string.
 function PCService:transferItem(fromSide, itemId, toSide)
     if fromSide == toSide then return true end
     local save = self:getSave()
@@ -135,34 +114,27 @@ function PCService:transferItem(fromSide, itemId, toSide)
 
         local inv = save.inventory or {}
         save.inventory = inv
-        
-        -- Check stack cap before adding
+
         if (inv[itemId] or 0) + qty > 99 then
             return false, "Stack maxed (99)"
         end
 
-        -- Delegate capacity checking to Bag.add() - it handles inventory addons properly
-        -- This mirrors Kanto Companion's approach which trusts the Bag module
         if bag and bag.add then
             local ok = bag.add(save, itemId, qty)
             if not ok then return false, "Bag can't hold more" end
         else
-            -- Fallback: only check capacity if Bag module unavailable
+
             if not inv[itemId] and self:bagSlotCount() >= self:bagCapacity() then
                 return false, "Bag is full"
             end
             inv[itemId] = (inv[itemId] or 0) + qty
         end
-        
+
         pc[itemId] = pc[itemId] - qty
         if pc[itemId] <= 0 then pc[itemId] = nil end
         return true
     end
 end
-
--- ======================================================================
--- Boxes: Party <-> PC boxes
--- ======================================================================
 
 function PCService:getBoxCount()
     local b = self:_boxes()
@@ -179,14 +151,11 @@ function PCService:getPartyMax()
     return (p and p.MAX) or 6
 end
 
--- Get current PC box
 function PCService:getCurrentBox()
     local save = self:getSave()
     return (save and save.currentBox) or 1
 end
 
--- Get all boxes, ensuring the save's box storage has been initialized
--- first (matches Kanto Companion's boxesEnsure()).
 function PCService:getBoxes()
     local save = self:getSave()
     local b = self:_boxes()
@@ -196,7 +165,6 @@ function PCService:getBoxes()
     return (save and save.boxes) or {}
 end
 
--- Get Pokémon in a specific box
 function PCService:getBoxPokemon(boxNumber)
     local boxes = self:getBoxes()
     return boxes[boxNumber] or {}
@@ -214,7 +182,7 @@ end
 local function isHealthyMon(m)
     if not m then return false end
     local hp = m.hp
-    return hp == nil or hp > 0   -- box mons may store nil hp = full health
+    return hp == nil or hp > 0
 end
 
 function PCService:_partyHealthyCount()
@@ -225,12 +193,6 @@ function PCService:_partyHealthyCount()
     return n
 end
 
--- Why placing `src` onto `tgt` would be refused (nil = allowed). Mirrors
--- Kanto Companion's placeBlocked: capacity and "can't deposit your last
--- Pokémon" only apply to a plain move (a swap always keeps the party at 6).
--- Separately, the party must always keep >=1 non-fainted Pokémon after the
--- operation -- unless it's already at 0 healthy, in which case a rescuing
--- swap is still allowed.
 function PCService:placeBlockedReason(src, tgt)
     if not (src and tgt) then return nil end
     local sMon = self:_arrayOf(src.loc, src.box)[src.index]
@@ -262,8 +224,6 @@ function PCService:placeBlockedReason(src, tgt)
     return nil
 end
 
--- Move (or swap) the Pokémon at `src` onto `tgt`. Same-slot is a no-op
--- success. Returns true, or false + a short reason string.
 function PCService:moveMon(src, tgt)
     if not tgt then return true end
     local sArr = self:_arrayOf(src.loc, src.box)
@@ -278,7 +238,7 @@ function PCService:moveMon(src, tgt)
 
     local tArr = self:_arrayOf(tgt.loc, tgt.box)
     local tMon = tgt.index and tArr[tgt.index]
-    if tMon and tMon ~= sMon then       -- SWAP
+    if tMon and tMon ~= sMon then
         sArr[src.index], tArr[tgt.index] = tMon, sMon
         return true
     end
@@ -296,13 +256,6 @@ function PCService:moveMon(src, tgt)
     return true
 end
 
--- ======================================================================
--- Modal lifecycle (freezes the overworld while the popup is open)
--- ======================================================================
-
--- Whether the PC popup is safe to open right now: a real save is loaded
--- and the engine's screen stack is sitting at the plain overworld (no
--- battle, no other menu already open). Mirrors Kanto Companion's canOpen.
 function PCService:canOpen()
     local game = self:_getGameService()
     local save = game:getSave()
@@ -317,12 +270,6 @@ function PCService:canOpen()
     return true
 end
 
--- Push a lightweight modal screen onto the engine's stack so the overworld
--- freezes while the PC is open (the engine's own update loop only ticks
--- the top of the stack -- same mechanism Kanto Companion uses). No
--- onKeyPressed body is needed: Android has no keyboard, so all popup
--- input still comes through InputSystem's existing touch/mouse hook, the
--- same as every other panel in this HUD.
 function PCService:openModal()
     local stack = self:_getGameService():getStack()
     if not (stack and stack.push) then return end

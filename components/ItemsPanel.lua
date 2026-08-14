@@ -26,9 +26,6 @@ function ItemsPanel:init()
     self:_listen("modal.opened", function(self2) self2._modalBlocking = true end)
     self:_listen("modal.closed", function(self2) self2._modalBlocking = false end)
 
-    -- PCService:canOpen() already refuses to open the PC during battle,
-    -- so this is purely visual/hit-test housekeeping to match that --
-    -- the button would otherwise sit there doing nothing on tap.
     self:_listen("battle.started", function(self2) self2._inBattle = true end)
     self:_listen("battle.ended", function(self2) self2._inBattle = false end)
 
@@ -36,8 +33,7 @@ function ItemsPanel:init()
         if not self2._active or self2._modalBlocking then return end
         self2:_handleClick(x, y, consume)
     end)
-    
-    -- Listen for mouse release to end scrollbar drag
+
     self:_listen("input.released", function(self2, x, y)
         self2:_scrollEndDrag()
     end)
@@ -47,7 +43,6 @@ function ItemsPanel:_handleClick(x, y, consume)
     if not self._props or not self._active then return end
     local px, py, pw, ph = self._props.x, self._props.y, self._props.w, self._props.h
 
-    -- Handle PC button (top-right) -- hidden during battle, see draw()
     if not self._inBattle then
         local btnW, btnH = 60, 20
         local btnX = px + pw - btnW - 8
@@ -59,8 +54,7 @@ function ItemsPanel:_handleClick(x, y, consume)
             return true
         end
     end
-    
-    -- Scrollbar drag hit zone
+
     local viewportHeight = ph - 28
     if self:_scrollTryStartDrag(x, y, { x = px, y = py + 24, w = pw, h = viewportHeight }) then
         if consume then consume() end
@@ -80,7 +74,6 @@ function ItemsPanel:draw(ctx)
     local game  = self:_service("GameService")
     local x, y, w, h = ctx.x, ctx.y, ctx.w, ctx.h
 
-    -- v1.0.65: cap max height to ~9 items worth (landscape wrap mode)
     local dItem = game:getItemData()
     local balls, heals, other = Helpers.categorizeItems(dItem, self.inventory)
     local sections = {
@@ -135,7 +128,6 @@ function ItemsPanel:draw(ctx)
         return
     end
 
-    -- ADDED: Calculate content and scroll metrics
     local itemHeight = 14
     local headerHeight = 16
     local startY = y + 24
@@ -143,10 +135,8 @@ function ItemsPanel:draw(ctx)
 
     local contentHeight = Helpers.sectionedContentHeight(sections, itemHeight, headerHeight, 4)
 
-    -- Clamp scroll to valid range
     local scrollOffset, maxScroll = self:_scrollClamp(contentHeight, viewportHeight)
 
-    -- Apply scissor to clip overflowing content
     love.graphics.setScissor(
         math.floor(x),
         math.floor(y + 24),
@@ -182,8 +172,7 @@ function ItemsPanel:draw(ctx)
     drawSec("BALLS", balls)
     drawSec("HEALING", heals)
     drawSec("OTHER", other)
-    
-    -- Clear scissor
+
     love.graphics.setScissor()
 
     self:_scrollDrawBar(

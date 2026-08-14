@@ -9,19 +9,13 @@ RoutePanel.__name = "RoutePanel"
 RoutePanel.needs = { "ConfigService", "FontService", "SpriteService", "EventBus" }
 Helpers.mixin(RoutePanel, ScrollableMixin)
 
--- ---- Layout constants shared between the real draw (draw()'s drawSec)
--- and the two size predictions below (_wrappedHeight, _contentHeight).
--- Previously each of the three kept its own separately-typed copy of
--- these same numbers (and _wrappedHeight/_contentHeight each re-derived
--- the section count with an identical five-line block). Naming them once
--- here means a spacing change can't leave prediction and draw disagreeing.
 local MAX_VISIBLE_ENTRIES = 5
-local ENTRY_H = 18              -- per-species row height
-local SEC_HEADER_H = 16         -- gap after a section's title row ("Grass 25%" etc)
-local SEC_SPACING = 4           -- gap after a section's last row
+local ENTRY_H = 18
+local SEC_HEADER_H = 16
+local SEC_SPACING = 4
 local TOP_PAD = 8
 local BOT_PAD = 4
-local NO_ENCOUNTERS_ROW_H = 14  -- height of the single "No wild encounters" fallback row
+local NO_ENCOUNTERS_ROW_H = 14
 
 function RoutePanel.new(locator, props)
     local self = setmetatable(Component.new(locator, props), RoutePanel)
@@ -35,7 +29,6 @@ function RoutePanel:init()
     self:_scrollListen()
     self:_listen("route.updated", function(_, route) self.route = route end)
 
-    -- v1.0.65: input handling for scrollbar drag
     self:_listen("input.pressed", function(self2, x, y, consume)
         if not self2._active then return end
         self2:_handleClick(x, y, consume)
@@ -45,7 +38,6 @@ function RoutePanel:init()
     end)
 end
 
--- v1.0.65: count total encounter entries across all sections
 function RoutePanel:_countEntries()
     if not self.route then return 0 end
     local n = 0
@@ -58,9 +50,6 @@ function RoutePanel:_countEntries()
     return n
 end
 
--- How many of grass/water sections will actually draw (i.e. have at least
--- one species). Was previously re-derived identically inside both
--- _wrappedHeight and _contentHeight.
 function RoutePanel:_sectionCount()
     if not self.route then return 0 end
     local sections = 0
@@ -69,7 +58,6 @@ function RoutePanel:_sectionCount()
     return sections
 end
 
--- v1.0.65: compute wrapped height (capped at 5 visible entries)
 function RoutePanel:_wrappedHeight(w, h)
     local totalEntries = self:_countEntries()
     local sections = self:_sectionCount()
@@ -77,7 +65,6 @@ function RoutePanel:_wrappedHeight(w, h)
     local visibleEntries = math.min(totalEntries, MAX_VISIBLE_ENTRIES)
     local neededH = TOP_PAD + (sections * SEC_HEADER_H) + (visibleEntries * ENTRY_H) + (sections * SEC_SPACING) + BOT_PAD
 
-    -- If no encounters, show "No wild encounters" row
     if totalEntries == 0 then
         neededH = TOP_PAD + NO_ENCOUNTERS_ROW_H + BOT_PAD
     end
@@ -85,7 +72,6 @@ function RoutePanel:_wrappedHeight(w, h)
     return math.min(h, neededH)
 end
 
--- v1.0.65: total content height for scroll calculation
 function RoutePanel:_contentHeight()
     local totalEntries = self:_countEntries()
     local sections = self:_sectionCount()
@@ -97,7 +83,6 @@ function RoutePanel:_handleClick(x, y, consume)
     if not self._props then return end
     local px, py, pw, ph = self._props.x, self._props.y, self._props.w, self._props.h
 
-    -- Hit zone: scrollbar track area
     local viewportHeight = ph - (TOP_PAD + BOT_PAD)
     if self:_scrollTryStartDrag(x, y, { x = px, y = py + TOP_PAD, w = pw, h = viewportHeight }) then
         if consume then consume() end
@@ -116,7 +101,6 @@ function RoutePanel:draw(ctx)
     local sprites= self:_service("SpriteService")
     local x, y, w, h = ctx.x, ctx.y, ctx.w, ctx.h
 
-    -- v1.0.65: landscape mode wraps background to content height (max 9 entries)
     local drawH = h
     if ctx.wrapHeight then
         drawH = self:_wrappedHeight(w, h)
@@ -136,12 +120,10 @@ function RoutePanel:draw(ctx)
         return
     end
 
-    -- Scroll metrics
     local contentHeight = self:_contentHeight()
     local viewportHeight = drawH - (TOP_PAD + BOT_PAD)
     local scrollOffset, maxScroll = self:_scrollClamp(contentHeight, viewportHeight)
 
-    -- Apply scissor
     love.graphics.setScissor(
         math.floor(x),
         math.floor(y + TOP_PAD),
@@ -154,9 +136,7 @@ function RoutePanel:draw(ctx)
 
     local f9 = fonts:getFont(9)
     love.graphics.setFont(f9)
-    -- Fixed column widths sized to the widest realistic value, not to any
-    -- one row's actual string -- keeps both columns lined up straight down
-    -- the list instead of wobbling with digit count.
+
     local COL_PCT_W = f9:getWidth("100%")
     local COL_GAP   = 6
     local pctColRight = x + w - 8
@@ -164,7 +144,7 @@ function RoutePanel:draw(ctx)
 
     local function drawSec(title, tab)
         if not tab or not tab.species or #tab.species == 0 then return end
-        if cy + ENTRY_H > maxCy then return end  -- conservative: don't orphan a header with no room for a row under it
+        if cy + ENTRY_H > maxCy then return end
         local f10 = fonts:getFont(10)
         love.graphics.setFont(f10)
         Colors.set(cfg.COL.dim, 1)
@@ -182,14 +162,7 @@ function RoutePanel:draw(ctx)
             local f11 = fonts:getFont(11)
             love.graphics.setFont(f11)
             Colors.set(cfg.COL.text, 1)
-            -- v2.1.38: every other name-printing site (PokemonPanel,
-            -- EnemyPanel, PCPopup) runs species names through
-            -- sanitizeName first so the ♀/♂ glyphs -- absent from LÖVE's
-            -- default font -- get swapped for "(F)"/"(M)" instead of
-            -- rendering as a missing-glyph box. This was the one spot
-            -- that printed the raw name, so gender-locked species with a
-            -- symbol in their name (e.g. Nidorino/Nidorina) showed a
-            -- blank/garbled glyph here instead of the gender tag.
+
             love.graphics.print(Helpers.sanitizeName(sp.name), math.floor(x+32), math.floor(cy))
             local lv
             if sp.minLevel == sp.maxLevel then
@@ -221,7 +194,6 @@ function RoutePanel:draw(ctx)
         end
     end
 
-    -- Clear scissor
     love.graphics.setScissor()
 
     self:_scrollDrawBar(

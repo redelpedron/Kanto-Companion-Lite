@@ -1,5 +1,3 @@
-
---- Tabs: clickable tab bar. Publishes "tab.changed" on selection.
 local Component = require("core.Component")
 local Colors = require("util.Colors")
 
@@ -14,17 +12,13 @@ function Tabs.new(locator, props)
     self.activeIdx = props.activeIdx or 1
     self.hitBoxes = {}
     self._modalBlocking = false
-    -- Two independent tab strips (party column, right column) share one
-    -- EventBus. `changeEvent` lets a second instance publish under its own
-    -- event name instead of colliding with "tab.changed"; omit it and this
-    -- behaves exactly as before.
+
     self._changeEvent = props.changeEvent or "tab.changed"
     return self
 end
 
 function Tabs:init()
-    -- See ItemsPanel.lua: while the PC popup is open it owns all input,
-    -- so tab taps underneath it must be ignored.
+
     self:_listen("modal.opened", function(self2) self2._modalBlocking = true end)
     self:_listen("modal.closed", function(self2) self2._modalBlocking = false end)
     self:_listen("input.pressed", function(self2, x, y, consume)

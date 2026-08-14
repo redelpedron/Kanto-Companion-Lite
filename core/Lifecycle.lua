@@ -1,6 +1,3 @@
-
---- Lifecycle: manages creation, initialization, and teardown of components.
--- Ensures deterministic cleanup to avoid memory leaks in long-running mods.
 local Lifecycle = {}
 Lifecycle.__index = Lifecycle
 
@@ -13,19 +10,16 @@ function Lifecycle.new()
     return self
 end
 
---- Store reference to locator for `needs` validation.
 function Lifecycle:setLocator(locator)
     self._locator = locator
 end
 
---- Store reference to logger for diagnostics.
 function Lifecycle:setLogger(log)
     self._log = log
 end
 
---- Create and init a component. Returns the instance.
 function Lifecycle:createComponent(Class, locator, props)
-    -- Validate `needs` if Class declares required services
+
     if Class.needs and self._locator then
         for _, serviceName in ipairs(Class.needs) do
             if not self._locator:has(serviceName) then
@@ -38,22 +32,19 @@ function Lifecycle:createComponent(Class, locator, props)
             end
         end
     end
-    
+
     local instance = Class.new(locator, props)
     table.insert(self._components, instance)
     instance:_doInit()
     return instance
 end
 
---- Register a system. Systems are plain tables now (no shared base class) --
--- each only implements the lifecycle methods it actually uses.
 function Lifecycle:registerSystem(system)
     table.insert(self._systems, system)
     if system.init then system:init() end
     return system
 end
 
---- Update all systems and active components.
 function Lifecycle:update(dt)
     for _, sys in ipairs(self._systems) do
         if sys.update then sys:update(dt) end
@@ -63,14 +54,12 @@ function Lifecycle:update(dt)
     end
 end
 
---- Draw all systems that draw (currently just RenderSystem).
 function Lifecycle:draw()
     for _, sys in ipairs(self._systems) do
         if sys.draw then sys:draw() end
     end
 end
 
---- Destroy everything.
 function Lifecycle:shutdown()
     for _, comp in ipairs(self._components) do
         pcall(function() comp:destroy() end)

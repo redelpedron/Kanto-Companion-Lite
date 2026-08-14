@@ -1,6 +1,3 @@
-
---- TypeEffectiveness: pure calculation component (no draw).
--- Publishes effectiveness data for other components to consume.
 local Component = require("core.Component")
 local TypeColors = require("util.TypeColors")
 local Helpers = require("util.Helpers")
@@ -20,7 +17,7 @@ end
 function TypeEffectiveness:_ensureTypeChart()
     if self._typeChartReady then return true end
     local gameService = self:_service("GameService")
-    local tc = gameService:getTypeChart()  -- Go through GameService abstraction
+    local tc = gameService:getTypeChart()
     if not tc then return false end
     self._typeChart = tc
     local data = gameService:getData()
@@ -43,7 +40,6 @@ function TypeEffectiveness:effectiveness(moveId, defenderTypes)
         return mult
     end
 
-    -- Fallback manual lookup
     local mult = 10
     for _, defType in ipairs(defenderTypes or {}) do
         local def = TypeColors.normalize(defType)

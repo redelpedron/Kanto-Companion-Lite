@@ -1,5 +1,3 @@
-
---- FontService: centralized font cache.
 local FontService = {}
 FontService.__index = FontService
 

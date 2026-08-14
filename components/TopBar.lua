@@ -6,7 +6,7 @@ local Helpers   = require("util.Helpers")
 local TopBar = setmetatable({}, { __index = Component })
 TopBar.__index = TopBar
 TopBar.__name = "TopBar"
-TopBar.needs = { "ConfigService", "FontService", "GameService" }
+TopBar.needs = { "ConfigService", "FontService", "GameService", "SaveService" }
 
 function TopBar.new(locator, props)
     local self = setmetatable(Component.new(locator, props), TopBar)
@@ -20,15 +20,7 @@ function TopBar:init()
     self:_listen("repel.updated",  function(_, r) self.repel = r or 0 end)
 end
 
--- =======================================================================
--- LANDSCAPE: full "label value" text, same density/format as the
--- original bar. Landscape has width to spare, so it keeps words
--- instead of portrait's compact icon chips -- only the grouping
--- (profile info left, live status right, with FPS now in the status
--- group) and the day/night icon are new.
--- =======================================================================
-
-local function drawLandscape(self, cfg, fonts, ctx)
+local function drawLandscape(self, cfg, fonts, ctx, showFps)
     local W    = ctx.w
     local topY = ctx.y or 0
     local h    = ctx.h or cfg.TOP_BAR_H
@@ -56,7 +48,6 @@ local function drawLandscape(self, cfg, fonts, ctx)
         end
     end
 
-    -- Left group: profile info (Name, Gold, Badges, Time Played, Caught, Seen)
     local name = (t.name ~= "" and t.name) or "Trainer"
     drawText(name, cfg.COL.text)
     drawText("$" .. tostring(t.money or 0), cfg.COL.gold)
@@ -81,11 +72,12 @@ local function drawLandscape(self, cfg, fonts, ctx)
         drawText("Repel " .. self.repel, cfg.COL.mid)
     end
 
-    -- Right group: live status (FPS, Location, day/night icon + Real Time)
     local rightElems = {}
-    local fps = love.timer and love.timer.getFPS and love.timer.getFPS()
-    if fps then
-        rightElems[#rightElems + 1] = { text = fps .. " FPS", col = Colors.fpsColor(fps) }
+    if showFps then
+        local fps = love.timer and love.timer.getFPS and love.timer.getFPS()
+        if fps then
+            rightElems[#rightElems + 1] = { text = fps .. " FPS", col = Colors.fpsColor(fps) }
+        end
     end
     if t.location and t.location ~= "" then
         rightElems[#rightElems + 1] = { text = t.location, col = cfg.COL.xp }
@@ -122,13 +114,6 @@ local function drawLandscape(self, cfg, fonts, ctx)
     end
 end
 
--- =======================================================================
--- PORTRAIT: compact icon+value chips (screen width is tight here, and
--- this is the orientation where a front-camera notch actually sits in
--- the content). Chip descriptors are measured up front so the same
--- `drawRow` can left-, right-, or center-align any group.
--- =======================================================================
-
 local function hasIcon(chip)
     return chip.icon and chip.icon ~= "none"
 end
@@ -155,10 +140,6 @@ local function rowWidth(f, cfg, chips)
     return total
 end
 
---- Low-level: draws `chips` left-to-right starting at `x`, using a
--- fixed `gap` between consecutive chips. `bg` is the row's background
--- color, needed only so the moon icon can cut its crescent correctly.
--- Every other chip-drawing helper below bottoms out here.
 local function drawChipsAt(f, cfg, chips, x, cy, gap, bg)
     love.graphics.setFont(f)
     local cx = x
@@ -182,8 +163,6 @@ local function drawChipsAt(f, cfg, chips, x, cy, gap, bg)
     end
 end
 
---- Draws `chips` in a single row inside [x, x+w] at vertical center
--- `cy`. `align` is "left" or "right".
 local function drawRow(f, cfg, chips, x, w, cy, align, bg)
     if #chips == 0 then return end
     local totalW = rowWidth(f, cfg, chips)
@@ -191,10 +170,6 @@ local function drawRow(f, cfg, chips, x, w, cy, align, bg)
     drawChipsAt(f, cfg, chips, startX, cy, cfg.TOPBAR_GAP, bg)
 end
 
---- Draws up to three chip groups in one row: `left` pinned to the left
--- edge, `right` pinned to the right edge, `center` centered in
--- whatever room is left. Used to spread a row's content around a
--- top-center notch instead of clustering it all on one side.
 local function drawAligned(f, cfg, x, w, cy, bg, left, center, right)
     if left and #left > 0 then
         drawRow(f, cfg, left, x, w, cy, "left", bg)
@@ -209,11 +184,6 @@ local function drawAligned(f, cfg, x, w, cy, bg, left, center, right)
     end
 end
 
---- Spreads `chips` across [x, x+w] with equal gaps between them --
--- like CSS's `justify-content: space-between`: the first chip's left
--- edge sits at x, the last chip's right edge sits at x+w. Never
--- shrinks the gap below the normal TOPBAR_GAP, so a very full row
--- overflows gracefully (right edge) instead of crowding chips together.
 local function drawEvenlySpaced(f, cfg, chips, x, w, cy, bg)
     local n = #chips
     if n == 0 then return end
@@ -230,10 +200,6 @@ local function drawEvenlySpaced(f, cfg, chips, x, w, cy, bg)
     drawChipsAt(f, cfg, chips, x, cy, gap, bg)
 end
 
--- Row 1 (profile): Name, Gold, Badges, Caught, Seen spread evenly
--- across the full row width (Time Played moved to row 2 -- see below).
--- Repel is a bonus field, tacked onto the end only when active so it
--- doesn't shift the fixed fields' positions on the frames it's absent.
 local function profileChips(cfg, t, repel)
     local name = (t.name ~= "" and t.name) or "Trainer"
     local chips = {
@@ -249,8 +215,6 @@ local function profileChips(cfg, t, repel)
     return chips
 end
 
--- Row 2 (live status): Time Played + Location pinned left, FPS + real
--- time pinned right -- leaves the top-center notch clear between them.
 local function statusLeftChips(cfg, t)
     local chips = {
         { icon = "clock", color = cfg.COL.dim, text = Math.formatPlayTime(t.playTime or 0) },
@@ -261,11 +225,13 @@ local function statusLeftChips(cfg, t)
     return chips
 end
 
-local function statusRightChips(cfg)
+local function statusRightChips(cfg, showFps)
     local chips = {}
-    local fps = love.timer and love.timer.getFPS and love.timer.getFPS()
-    if fps then
-        chips[#chips + 1] = { icon = "dot", color = Colors.fpsColor(fps), text = fps .. " FPS" }
+    if showFps then
+        local fps = love.timer and love.timer.getFPS and love.timer.getFPS()
+        if fps then
+            chips[#chips + 1] = { icon = "dot", color = Colors.fpsColor(fps), text = fps .. " FPS" }
+        end
     end
     local ok, now = pcall(os.date, "*t")
     if ok and now then
@@ -278,7 +244,7 @@ local function statusRightChips(cfg)
     return chips
 end
 
-local function drawPortrait(self, cfg, fonts, ctx)
+local function drawPortrait(self, cfg, fonts, ctx, showFps)
     local W      = ctx.w
     local topY   = ctx.y or 0
     local h      = ctx.h or cfg.TOP_BAR_ROW_H
@@ -287,16 +253,15 @@ local function drawPortrait(self, cfg, fonts, ctx)
     local bg     = cfg.COL.panelTop
 
     if stackMode then
-        -- Portrait stacked mode: render both rows in one component with divider
+
         local rowH = h / 2
         local t = self.trainer
         local f = fonts:getFont(cfg.TOPBAR_FONT_SZ)
         love.graphics.setFont(f)
-        
+
         local padX = cfg.TOPBAR_PAD_X
         local rowW = W - padX * 2
 
-        -- Row 1: Player info
         Colors.set(bg, 0.95)
         love.graphics.rectangle("fill", 0, math.floor(topY), math.floor(W), math.floor(rowH), 0, 0)
         love.graphics.setLineWidth(1)
@@ -304,21 +269,20 @@ local function drawPortrait(self, cfg, fonts, ctx)
         love.graphics.line(0, topY, W, topY)
         Colors.set(cfg.COL.border, 0.4)
         love.graphics.line(0, topY + rowH, W, topY + rowH)
-        
+
         local cy1 = topY + rowH / 2
         drawEvenlySpaced(f, cfg, profileChips(cfg, t, self.repel), padX, rowW, cy1, bg)
 
-        -- Row 2: Collection/status info
         Colors.set(bg, 0.95)
         love.graphics.rectangle("fill", 0, math.floor(topY + rowH), math.floor(W), math.floor(rowH), 0, 0)
         Colors.set(cfg.COL.border, 0.4)
         love.graphics.line(0, topY + h, W, topY + h)
-        
+
         local cy2 = topY + rowH + rowH / 2
         drawAligned(f, cfg, padX, rowW, cy2, bg,
-            statusLeftChips(cfg, t), nil, statusRightChips(cfg))
+            statusLeftChips(cfg, t), nil, statusRightChips(cfg, showFps))
     else
-        -- Single row mode: render just one section
+
         Colors.set(bg, 0.95)
         love.graphics.rectangle("fill", 0, math.floor(topY), math.floor(W), math.floor(h), 0, 0)
         love.graphics.setLineWidth(1)
@@ -339,7 +303,7 @@ local function drawPortrait(self, cfg, fonts, ctx)
             drawEvenlySpaced(f, cfg, profileChips(cfg, t, self.repel), padX, rowW, cy, bg)
         else
             drawAligned(f, cfg, padX, rowW, cy, bg,
-                statusLeftChips(cfg, t), nil, statusRightChips(cfg))
+                statusLeftChips(cfg, t), nil, statusRightChips(cfg, showFps))
         end
     end
 end
@@ -348,10 +312,12 @@ function TopBar:draw(ctx)
     local cfg   = self:_service("ConfigService")
     local fonts = self:_service("FontService")
 
+    local showFps = self:_service("SaveService"):isFpsVisible()
+
     if ctx.isPortrait then
-        drawPortrait(self, cfg, fonts, ctx)
+        drawPortrait(self, cfg, fonts, ctx, showFps)
     else
-        drawLandscape(self, cfg, fonts, ctx)
+        drawLandscape(self, cfg, fonts, ctx, showFps)
     end
 end
 

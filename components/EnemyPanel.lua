@@ -9,24 +9,13 @@ EnemyPanel.__index = EnemyPanel
 EnemyPanel.__name = "EnemyPanel"
 EnemyPanel.needs = { "ConfigService", "FontService", "SpriteService", "TypeEffectiveness", "CatchRate", "GameService" }
 
--- ---- Layout constants shared between the real draw (_drawContent /
--- draw()) and the wrap-height size prediction (_contentHeight below).
--- Two groups:
---  - mode-invariant literals: identical in both two-column and
---    single-panel layout, so _drawContent hardcodes them directly rather
---    than threading them through geom.
---  - SINGLE.*: single-panel-only geom values (these DO differ from the
---    two-column layout's own literals in _drawTwoColumn, by design).
--- Previously each of these existed as a bare number in both _drawContent
--- and a second, separately-typed copy in _contentHeight; changing one
--- without the other would silently desync predicted vs. actual panel
--- height. Naming them here means there's exactly one place to change.
-local CAPTION_H  = 16  -- gap after "Wild/Trainer Battle" caption
-local HP_ROW_GAP = 12  -- gap after HP bar row
-local MOVE_LABEL_H = 12 -- "YOUR MOVE" label row above the move grid
-local MOVES_H    = 32  -- 2x2 move grid height
-local NO_MOVES_H = 14  -- "No move data" row height
-local CATCH_GAP  = 4   -- gap before catch-rate section when crGeom.startY is nil (single-panel only)
+local CAPTION_H  = 16
+local HP_ROW_GAP = 12
+local MOVE_LABEL_H = 12
+local MOVES_H    = 32
+local MOVES_H_STACKED = 60
+local NO_MOVES_H = 14
+local CATCH_GAP  = 4
 
 local SINGLE = {
     nameX         = 48,
@@ -45,9 +34,7 @@ function EnemyPanel.new(locator, props)
     self.enemy = nil
     self.activeMon = nil
     self.inventory = {}
-    -- Caption text (see _drawContent): nil outside of trainer battles, so
-    -- the panel reads "Wild Battle"; set to the trainer's name whenever
-    -- one is fighting, same event the Rival tab label already uses.
+
     self.trainerName = nil
     return self
 end
@@ -69,16 +56,19 @@ function EnemyPanel:_contentHeight(w)
     h = h + HP_ROW_GAP
     local active = self.activeMon
     if active and active.moves and #active.moves > 0 then
-        h = h + MOVE_LABEL_H + MOVES_H
+
+        if self.trainerName then
+            h = h + MOVE_LABEL_H + MOVES_H_STACKED
+        else
+            h = h + MOVE_LABEL_H + MOVES_H
+        end
     else
         h = h + NO_MOVES_H
     end
-    h = h + CATCH_GAP
-    h = h + SINGLE.catchRowH -- catch-rate section header row ("CATCH RATE" or "Can't be caught")
     if not self.trainerName then
-        -- Trainer's mons can never be caught (Gen 1 rule), so in a
-        -- trainer battle we only ever draw the one header-row note above
-        -- and skip the ball-by-ball odds list entirely.
+
+        h = h + CATCH_GAP
+        h = h + SINGLE.catchRowH
         local balls = { "POKE_BALL", "GREAT_BALL", "ULTRA_BALL", "MASTER_BALL" }
         local hasAny = false
         for _, ballId in ipairs(balls) do
@@ -95,29 +85,103 @@ function EnemyPanel:_contentHeight(w)
     return h
 end
 
--- Shared enemy-info renderer. `geom` describes the differences between
--- the two-column battle-HUD layout and the single-panel wrap-height
--- layout so this body runs once instead of being duplicated ~165 lines
--- across draw() and _drawTwoColumn().
---
--- geom = {
---   x, y, w,            -- panel origin/width (name column uses w unless nameColW given)
---   nameColW,            -- width of the name/HP/moves column (defaults to w)
---   nameX,               -- x-offset of name/type text from sprite (44 in two-col, 48 in single)
---   spriteScale,         -- target sprite size in px (32 two-col, 36 single)
---   ballRadius,          -- caught-icon radius (4 two-col, 5 single)
---   ballOffset,          -- caught-icon x-offset back from nameX (10 two-col, 12 single)
---   ballDotRadius,       -- caught-icon center-dot radius (1.5 two-col, 2 single)
---   nameFontSize,        -- 12 two-col, 13 single
---   typeSpacing,         -- vertical gap after type row (12 / 14)
---   levelSpacing,        -- vertical gap after name/level row (18 / 20)
---   catchRate = {
---     x, w,               -- catch-rate column origin/width (rightX/rightW, or x/w)
---     startY,             -- fixed y to start at (two-col: y+6) or nil to continue from cy
---     rowH,                -- 16 two-col, 14 single
---     bottomBound,         -- y beyond which drawing stops (nil = unbounded, two-col case)
---   },
--- }
+function EnemyPanel:_drawMoveList(cfg, fonts, te, en, x, y, w, stacked)
+    local active = self.activeMon
+    local f10 = fonts:getFont(10)
+    if not (active and active.moves and #active.moves > 0) then
+        love.graphics.setFont(f10)
+        Colors.set(cfg.COL.dim, 1)
+        love.graphics.print("No move data", math.floor(x), math.floor(y))
+        return NO_MOVES_H
+    end
+
+    love.graphics.setFont(f10)
+    Colors.set(cfg.COL.dim, 1)
+    love.graphics.print("Your Move", math.floor(x), math.floor(y))
+    local cy = y + MOVE_LABEL_H
+
+    local colW = stacked and w or math.floor(w / 2)
+    local moveH = 14
+    local dMove = self._props.moveData or {}
+    local f9b = fonts:getFont(9)
+    local ppSlotW = 36
+
+    local stabSlotW = stacked and 14 or 0
+    local activeTypes = nil
+    if stacked and active.species then
+        local pdef = (self._props.pokemonData or {})[active.species]
+        if pdef and pdef.types then
+            activeTypes = {}
+            for _, t in ipairs(pdef.types) do
+                activeTypes[TypeColors.normalize(t)] = true
+            end
+        end
+    end
+    for i, mv in ipairs(active.moves) do
+        if i > 4 then break end
+        local col = stacked and 0 or ((i - 1) % 2)
+        local row = stacked and (i - 1) or math.floor((i - 1) / 2)
+
+        local mx = math.floor(x + col * colW)
+        local my = math.floor(cy + row * moveH)
+        local md = dMove[mv.id]
+        local moveName = mv.name or (md and md.name) or "?"
+        local ppCurr = mv.pp or 0
+        local ppMax  = mv.maxpp or (md and md.pp) or 0
+        local moveCol = cfg.COL.text
+        local noEffect = false
+        local quadEffective = false
+        if en.types then
+            local eff = te:effectiveness(mv.id, en.types)
+            if eff <= 0.01 then
+
+                noEffect = true
+                moveCol = cfg.COL.dim
+            elseif eff < 9.99 then
+                moveCol = cfg.COL.lo
+            elseif eff > 39.99 then
+                quadEffective = true
+                moveCol = cfg.COL.se
+            elseif eff > 10 then
+                moveCol = cfg.COL.se
+            end
+        end
+        local isStab = false
+        if activeTypes and md then
+            local mvType = TypeColors.normalize(md.type or md.typeName or "")
+            isStab = mvType ~= "" and activeTypes[mvType] == true
+        end
+        local f11 = fonts:getFont(11)
+        love.graphics.setFont(f11)
+        Colors.set(moveCol, 1)
+
+        local nameMaxW = colW - ppSlotW - stabSlotW - 4
+        while f11:getWidth(moveName) > nameMaxW and #moveName > 1 do
+            moveName = moveName:sub(1, #moveName - 1)
+        end
+        love.graphics.print(moveName, mx, my)
+        if quadEffective then
+
+            love.graphics.print(moveName, mx + 1, my)
+        end
+        if noEffect then
+            local lineY = math.floor(my + f11:getHeight() * 0.55)
+            love.graphics.setLineWidth(1)
+            love.graphics.line(mx, lineY, mx + f11:getWidth(moveName), lineY)
+        end
+        if isStab then
+            Colors.set(cfg.COL.se, 1)
+            Helpers.drawIcon("bolt", mx + colW - ppSlotW - stabSlotW / 2, my + f11:getHeight() / 2, 12)
+        end
+        local ppStr = tostring(ppCurr) .. "/" .. tostring(ppMax)
+        love.graphics.setFont(f9b)
+        Colors.set(cfg.COL.dim, 1)
+
+        love.graphics.print(ppStr, math.floor(mx + colW - 8 - f9b:getWidth(ppStr)), my)
+    end
+    return MOVE_LABEL_H + (stacked and MOVES_H_STACKED or MOVES_H)
+end
+
 function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
     local en = self.enemy
     local x, y = geom.x, geom.y
@@ -127,7 +191,7 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
     local f10 = fonts:getFont(10)
     love.graphics.setFont(f10)
     Colors.set(cfg.COL.dim, 1)
-    -- FIX v2.1.30: was hardcoded "Wild Battle" even for trainer fights.
+
     love.graphics.print(self.trainerName and "Trainer Battle" or "Wild Battle", math.floor(x+8), math.floor(cy))
     cy = cy + CAPTION_H
     local img = sprites:getSprite(en.species, self._props.pokemonData)
@@ -202,56 +266,13 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
     Colors.set(cfg.COL.text, 1)
     love.graphics.print(hpStr, math.floor(x+nameColW-8-f9b:getWidth(hpStr)), math.floor(cy))
     cy = cy + HP_ROW_GAP
-    local active = self.activeMon
-    if active and active.moves and #active.moves > 0 then
-        love.graphics.setFont(f10)
-        Colors.set(cfg.COL.dim, 1)
-        love.graphics.print("YOUR MOVE", math.floor(x+8), math.floor(cy))
-        cy = cy + MOVE_LABEL_H
 
-        -- integer column width prevents fractional pixel misalignment
-        local colW = math.floor((nameColW - 16) / 2)
-        local moveH = 14
-        local dMove = self._props.moveData or {}
-        local ppSlotW = 36
-        for i, mv in ipairs(active.moves) do
-            if i > 4 then break end
-            local col = (i - 1) % 2
-            local row = math.floor((i - 1) / 2)
-            -- integer mx/my prevents subpixel drift
-            local mx = math.floor(x + 8 + col * colW)
-            local my = math.floor(cy + row * moveH)
-            local moveName = mv.name or (dMove[mv.id] and dMove[mv.id].name) or "?"
-            local ppCurr = mv.pp or 0
-            local ppMax  = mv.maxpp or (dMove[mv.id] and dMove[mv.id].pp) or 0
-            local moveCol = cfg.COL.text
-            if en.types and te:effectiveness(mv.id, en.types) > 10 then
-                moveCol = cfg.COL.se
-            end
-            local f11 = fonts:getFont(11)
-            love.graphics.setFont(f11)
-            Colors.set(moveCol, 1)
-            -- truncate name so it never overlaps PP
-            local nameMaxW = colW - ppSlotW - 4
-            while f11:getWidth(moveName) > nameMaxW and #moveName > 1 do
-                moveName = moveName:sub(1, #moveName - 1)
-            end
-            love.graphics.print(moveName, mx, my)
-            local ppStr = tostring(ppCurr) .. "/" .. tostring(ppMax)
-            love.graphics.setFont(f9b)
-            Colors.set(cfg.COL.dim, 1)
-            -- PP right-aligned to consistent column edge
-            love.graphics.print(ppStr, math.floor(mx + colW - 8 - f9b:getWidth(ppStr)), my)
-        end
-        cy = cy + MOVES_H
-    else
-        love.graphics.setFont(f10)
-        Colors.set(cfg.COL.dim, 1)
-        love.graphics.print("No move data", math.floor(x+8), math.floor(cy))
-        cy = cy + NO_MOVES_H
-    end
+    if geom.skipMovesAndCatch then return end
 
-    -- ---- Catch rate section ----
+    cy = cy + self:_drawMoveList(cfg, fonts, te, en, x+8, cy, nameColW-16, geom.stackMoves or false)
+
+    if self.trainerName then return end
+
     local crGeom = geom.catchRate
     local crX, crW = crGeom.x, crGeom.w
     local ry = crGeom.startY or (cy + CATCH_GAP)
@@ -259,17 +280,6 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
 
     love.graphics.setFont(f10)
     Colors.set(cfg.COL.dim, 1)
-
-    -- v2.1.38: trainer mons can never be caught (Gen 1 rule) -- showing
-    -- catch odds for them is meaningless at best, misleading at worst.
-    -- Swap the whole section for a one-line note instead of the ball
-    -- list once we know it's a trainer battle (self.trainerName is only
-    -- set then -- see the "Wild Battle"/"Trainer Battle" caption above).
-    if self.trainerName then
-        love.graphics.print("Can't be caught", math.floor(crX+8), math.floor(ry))
-        return
-    end
-
     love.graphics.print("CATCH RATE", math.floor(crX+8), math.floor(ry))
     ry = ry + crGeom.rowH
 
@@ -311,6 +321,24 @@ function EnemyPanel:_drawTwoColumn(cfg, fonts, sprites, te, cr, x, y, w, h)
     local leftW = math.floor(w * 0.55)
     local rightX = x + leftW
     local rightW = w - leftW
+
+    if self.trainerName then
+        self:_drawContent(cfg, fonts, sprites, te, cr, {
+            x = x, y = y, w = w,
+            nameColW = leftW,
+            nameX = 44,
+            spriteScale = 32,
+            ballRadius = 4,
+            ballOffset = 10,
+            ballDotRadius = 1.5,
+            nameFontSize = 12,
+            typeSpacing = 12,
+            levelSpacing = 18,
+            skipMovesAndCatch = true,
+        })
+        self:_drawMoveList(cfg, fonts, te, en, rightX + 8, y + 6, rightW - 16, true)
+        return
+    end
 
     self:_drawContent(cfg, fonts, sprites, te, cr, {
         x = x, y = y, w = w,
@@ -374,6 +402,8 @@ function EnemyPanel:draw(ctx)
         nameFontSize = SINGLE.nameFontSize,
         typeSpacing = SINGLE.typeSpacing,
         levelSpacing = SINGLE.levelSpacing,
+
+        stackMoves = self.trainerName ~= nil,
         catchRate = { x = x, w = w, startY = nil, rowH = SINGLE.catchRowH, bottomBound = y + drawH - 4 },
     })
 end

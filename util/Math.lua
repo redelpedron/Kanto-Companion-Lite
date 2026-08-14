@@ -1,5 +1,3 @@
-
---- Math: small utility functions.
 local M = {}
 
 function M.clamp(v, min, max)

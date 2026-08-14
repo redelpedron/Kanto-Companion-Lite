@@ -1,14 +1,6 @@
-
---- Helpers: general-purpose utilities.
 local Colors = require("util.Colors")
 
 local Helpers = {}
-
--- ---------------------------------------------------------------------
--- Mixin composition: copy every function from `mixin` onto `class` without
--- disturbing `class`'s own `__index`/metatable chain to Component. Used to
--- attach ScrollableMixin to components that already inherit from Component.
--- ---------------------------------------------------------------------
 
 function Helpers.mixin(class, mixinTable)
     for k, v in pairs(mixinTable) do
@@ -19,16 +11,6 @@ function Helpers.mixin(class, mixinTable)
     return class
 end
 
--- ---------------------------------------------------------------------
--- Safe-area (notch / punch-hole front camera / gesture-bar) support.
--- Pure engine query, same category as util.Colors already touching
--- love.graphics -- not a "game.save" architecture leak.
--- ---------------------------------------------------------------------
-
---- Returns { top, right, bottom, left } padding (px) to keep clear of
--- device cutouts. Backed by love.window.getSafeArea() (LOVE 11.4+); on
--- engines/backends where it's unavailable this safely reports all
--- zeros rather than guessing.
 function Helpers.getSafeInsets(cfg)
     local insets = { top = 0, right = 0, bottom = 0, left = 0 }
     if not (love and love.window and love.graphics) then return insets end
@@ -46,11 +28,6 @@ function Helpers.getSafeInsets(cfg)
     return insets
 end
 
--- ---------------------------------------------------------------------
--- Tiny vector icon glyphs for HUD chips (TopBar and friends). Pure
--- love.graphics drawing -- caller sets the color beforehand with
--- Colors.set, same convention as everywhere else in this codebase.
--- ---------------------------------------------------------------------
 local ICONS = {}
 
 ICONS.coin = function(cx, cy, s)
@@ -75,7 +52,7 @@ ICONS.clock = function(cx, cy, s)
     love.graphics.line(cx, cy, cx + r * 0.45, cy + r * 0.1)
 end
 
-ICONS.caught = function(cx, cy, s) -- pokeball
+ICONS.caught = function(cx, cy, s)
     local r = s * 0.5
     love.graphics.circle("line", cx, cy, r)
     love.graphics.line(cx - r, cy, cx + r, cy)
@@ -83,7 +60,7 @@ ICONS.caught = function(cx, cy, s) -- pokeball
     love.graphics.circle("line", cx, cy, r * 0.28)
 end
 
-ICONS.seen = function(cx, cy, s) -- eye
+ICONS.seen = function(cx, cy, s)
     love.graphics.ellipse("line", cx, cy, s * 0.48, s * 0.28)
     love.graphics.circle("fill", cx, cy, s * 0.13)
 end
@@ -108,11 +85,6 @@ ICONS.sun = function(cx, cy, s)
     end
 end
 
--- Cuts a crescent out of a filled circle using a second circle drawn in
--- the background color -- cheap, no stencil buffer needed, correct as
--- long as the chip sits on a flat-colored background (true for this
--- HUD's top bar). `bg` is that background color; falls back to a plain
--- filled circle if the caller doesn't supply one.
 ICONS.moon = function(cx, cy, s, bg)
     local r = s * 0.42
     love.graphics.circle("fill", cx, cy, r)
@@ -126,24 +98,32 @@ ICONS.dot = function(cx, cy, s)
     love.graphics.circle("fill", cx, cy, s * 0.28)
 end
 
---- Draws a small icon glyph centered at (cx, cy). `size` is its
--- bounding box in px. `bg` is only used by "moon" (see above). Colors
--- are the caller's responsibility (Colors.set before calling), except
--- "moon" which resets its own color for the cutout and leaves the
--- graphics color state as `bg` on return -- callers drawing anything
--- after a moon icon should re-apply Colors.set themselves.
+ICONS.battery = function(cx, cy, s)
+
+    local bw, bh = s * 0.62, s * 0.36
+    local bx, by = cx - bw / 2 - s * 0.07, cy - bh / 2
+    love.graphics.rectangle("line", bx, by, bw, bh, 1, 1)
+    local nubW, nubH = s * 0.08, bh * 0.5
+    love.graphics.rectangle("fill", bx + bw, cy - nubH / 2, nubW, nubH)
+end
+
+ICONS.bolt = function(cx, cy, s)
+    local w, h = s * 0.5, s * 0.7
+    love.graphics.polygon("fill",
+        cx + w * 0.12, cy - h / 2,
+        cx - w * 0.32, cy + h * 0.08,
+        cx - w * 0.02, cy + h * 0.08,
+        cx - w * 0.12, cy + h / 2,
+        cx + w * 0.32, cy - h * 0.08,
+        cx + w * 0.02, cy - h * 0.08)
+end
+
 function Helpers.drawIcon(name, cx, cy, size, bg)
     local fn = ICONS[name]
     if not fn then return end
     fn(cx, cy, size, bg)
 end
 
--- Successful requires are already cached by Lua's own package.loaded, but a
--- FAILED require (module genuinely absent) is not cached anywhere, so every
--- caller re-walks the package search path on every single call. Cache both
--- outcomes here so callers (e.g. GameService's per-tick lookups) don't pay
--- that cost repeatedly. MISSING is a distinct sentinel from nil so "never
--- tried" and "tried, confirmed absent" aren't ambiguous.
 local MISSING = {}
 local _requireCache = {}
 
@@ -172,7 +152,6 @@ function Helpers.sanitizeName(name)
     return name
 end
 
--- Gen 1 has no bag pockets, so items are classified by id for display.
 local HEAL_IDS = {
     POTION=true, SUPER_POTION=true, HYPER_POTION=true, MAX_POTION=true, FULL_RESTORE=true,
     FULL_HEAL=true, ANTIDOTE=true, BURN_HEAL=true, ICE_HEAL=true, AWAKENING=true, PARLYZ_HEAL=true,
@@ -195,17 +174,6 @@ function Helpers.isHealItem(id)
         or id:find("ELIXER", 1, true) ~= nil
 end
 
--- Progress toward the next level, as a 0..1 fraction (plus exp still
--- needed) for `mon` given its species growth-rate curve. Requires the
--- engine's growth system (src.pokemon.Growth, see GameService) and the
--- species def for its growthRate. Returns nil, nil if any required piece
--- is missing (no growth system, no def, mon not carrying exp/level yet)
--- -- callers that want to hide an xp bar rather than draw a misleading
--- empty one (see PokemonPanel's `m.xpProgress ~= nil` check) rely on
--- that nil, not a 0 fallback.
--- Extracted from two near-identical copies: GameDataSystem (building the
--- party.updated payload) and PCPopup (the PC-popup party view), which
--- had drifted into two independent implementations of the same formula.
 function Helpers.expProgress(growth, def, mon, rates)
     if not (growth and def and def.growthRate and mon.exp and mon.level) then
         return nil, nil
@@ -220,11 +188,6 @@ function Helpers.expProgress(growth, def, mon, rates)
     return prog, next_
 end
 
--- Splits {itemId=count} into Balls / Healing / Other, sorted by name --
--- the shared 3-bucket scheme both ItemsPanel and PCPopup display, so
--- both mod-wide item lists always agree on categorization/ordering.
--- Extracted from two near-identical hand-rolled copies (v2.1.41 and
--- earlier). Each row is {id, name, qty}.
 function Helpers.categorizeItems(dItem, itemsTable)
     local balls, heals, other = {}, {}, {}
     for id, count in pairs(itemsTable) do
@@ -247,19 +210,6 @@ function Helpers.categorizeItems(dItem, itemsTable)
     return balls, heals, other
 end
 
--- Sum content height across a list of {rows = {...}, ...} sections -- the
--- shape both ItemsPanel and PCPopup's item lists use after categorizeItems
--- (BALLS/HEALING/OTHER). Empty sections contribute nothing. Was previously
--- reimplemented independently in three places: ItemsPanel's wrap-height
--- size prediction, ItemsPanel's real scroll content height, and PCPopup's
--- _drawItemList -- the last of those uses different rowH/headerH (its
--- modal has bigger rows), which is real, deliberate variability, but the
--- formula shape was identical in all three.
---
--- maxRows caps the TOTAL row count summed across all sections (not
--- per-section) before multiplying by rowH -- this is what lets
--- ItemsPanel's wrap-height prediction (capped at ~9 visible rows) share
--- this same helper with the real, uncapped content-height calculations.
 function Helpers.sectionedContentHeight(sections, rowH, headerH, spacing, maxRows)
     local nonEmptyCount = 0
     local totalRows = 0

@@ -1,15 +1,3 @@
---- PCPopup: full-screen modal PC window -- Items (Bag <-> PC) and Boxes
--- (Party <-> PC boxes) as two tabs in one popup, matching Kanto
--- Companion's "I" and "P" screens. Touch-only: there's no mouse drag on
--- Android, so the interaction model is tap-to-pick-up / tap-to-place
--- instead of Kanto's click-and-drag -- same underlying moves and rules
--- (capacity, stack caps, "keep a healthy Pokemon in the party"), just
--- triggered by two taps instead of a drag gesture.
---
--- All game-state reads/writes go through PCService; this component only
--- ever touches the props it receives, its own view state (which tab, what
--- it's currently holding, which box is open), and the hit-test list it
--- rebuilds every draw() call -- no game.save access here.
 local Component = require("core.Component")
 local Colors    = require("util.Colors")
 local Helpers   = require("util.Helpers")
@@ -25,15 +13,14 @@ Helpers.mixin(PCPopup, ScrollableMixin)
 
 function PCPopup.new(locator, props)
     local self = setmetatable(Component.new(locator, props), PCPopup)
-    self.tab      = "items"   -- "items" | "boxes"
-    self.heldItem = nil       -- { from="bag"/"pc", id, qty, name }
-    self.heldMon  = nil       -- { mon, name, src={loc,box,index} }
+    self.tab      = "items"
+    self.heldItem = nil
+    self.heldMon  = nil
     self.boxView  = 1
     self.status   = nil
     self.statusAt = 0
     self._hit     = {}
-    -- Scroll state for item panels (bag and pc side-by-side), keyed
-    -- by side so one mixin instance drives both independently.
+
     self:_scrollInit()
     return self
 end
@@ -50,13 +37,11 @@ function PCPopup:init()
 
     self:_listen("input.pressed", function(self2, x, y, consume)
         if not self2:isActive() then return end
-        -- The popup owns all input while it's open, same as Kanto
-        -- Companion's pushed modal screen capturing every click.
+
         if consume then consume() end
         self2:_handleClick(x, y)
     end)
-    
-    -- Listen for mouse/touch release to stop scrollbar drag
+
     self:_listen("input.released", function(self2, x, y, consume)
         if not self2:isActive() then return end
         if self2._scrollDragging then
@@ -73,10 +58,6 @@ function PCPopup:update(dt)
 
     self:_scrollUpdateDrag()
 end
-
--- ======================================================================
--- Open / close
--- ======================================================================
 
 function PCPopup:openPopup()
     if self:isActive() then return end
@@ -99,26 +80,16 @@ function PCPopup:closePopup()
     pc:closeModal()
     self.heldItem, self.heldMon = nil, nil
     self._hit = {}
-    -- Reset scroll state
+
     self:_scrollReset()
     self:setActive(false)
     self.bus:publish("modal.closed")
 end
 
--- ======================================================================
--- Input
--- ======================================================================
-
--- `viewport` is optional: pass the same Viewport used to clip drawing
--- (e.g. a scrolled list) so a region scrolled outside it can never be
--- hit-tested as tappable, even though its raw x/y/w/h says it overlaps
--- (x, y). Regions that are always fully on-screen (buttons, tabs, full
--- panel backgrounds) can omit it.
 function PCPopup:_hitRegion(x, y, w, h, tag, data, viewport)
     self._hit[#self._hit + 1] = { x = x, y = y, w = w, h = h, tag = tag, data = data, viewport = viewport }
 end
 
--- Last-registered (topmost drawn) region wins, same as Kanto's topHit.
 function PCPopup:_topHit(x, y)
     for i = #self._hit, 1, -1 do
         local r = self._hit[i]
@@ -136,13 +107,12 @@ function PCPopup:_setStatus(msg)
 end
 
 function PCPopup:_handleClick(x, y)
-    -- Check for scrollbar drag FIRST (before hit test)
+
     if self.tab == "items" then
         local L = self:_computeLayout(love.graphics.getDimensions())
         local bx, by, bw, bh = L.wx + 10, L.bodyY, L.ww - 20, L.bodyH
         local p1, p2 = self:_splitPanels(bx, by, bw, bh, L.portrait)
 
-        -- Check bag scrollbar (left panel), then PC scrollbar (right panel)
         if self:_scrollTryStartDrag(x, y, { x = p1.x, y = p1.y + 28, w = p1.w, h = p1.h }, "bag") then
             return
         end
@@ -150,7 +120,7 @@ function PCPopup:_handleClick(x, y)
             return
         end
     end
-    
+
     local tag, data = self:_topHit(x, y)
     if tag == "close" then
         self:closePopup()
@@ -174,7 +144,7 @@ function PCPopup:_handleItemsClick(tag, data)
 
     if tag == "itemrow" then
         if self.heldItem and self.heldItem.from == data.side and self.heldItem.id == data.id then
-            self.heldItem = nil   -- tap the held item again -> cancel
+            self.heldItem = nil
             return
         end
         if self.heldItem and self.heldItem.from ~= data.side then
@@ -183,7 +153,7 @@ function PCPopup:_handleItemsClick(tag, data)
             self.heldItem = nil
             return
         end
-        -- Pick up (or switch to) an item on this side.
+
         local qty = (data.side == "bag") and (pc:getBagItems()[data.id] or 0) or pc:getItemCount(data.id)
         if qty > 0 then
             local dItem = self:_service("GameService"):getItemData()
@@ -193,8 +163,6 @@ function PCPopup:_handleItemsClick(tag, data)
         return
     end
 
-    -- tag == "panel": tapped empty space in a list -> drop here if we're
-    -- holding something from the other side, otherwise just release.
     if self.heldItem and self.heldItem.from ~= data.side then
         local ok, err = pc:transferItem(self.heldItem.from, self.heldItem.id, data.side)
         self:_setStatus(ok and nil or err)
@@ -209,7 +177,7 @@ function PCPopup:_handleBoxesClick(tag, data)
         if self.heldMon then
             local src = self.heldMon.src
             if src.loc == data.loc and src.box == data.box and src.index == data.index then
-                self.heldMon = nil   -- tap the held slot again -> cancel
+                self.heldMon = nil
                 return
             end
             local tgt = { loc = data.loc, box = data.box, index = data.index }
@@ -248,10 +216,6 @@ function PCPopup:_handleBoxesClick(tag, data)
     end
 end
 
--- ======================================================================
--- Layout helpers
--- ======================================================================
-
 function PCPopup:_computeLayout(W, H)
     local M = 16
     local headerH, footerH = 46, 24
@@ -275,10 +239,6 @@ function PCPopup:_splitPanels(x, y, w, h, portrait)
         return { x = x, y = y, w = pw, h = h }, { x = x + pw + gap, y = y, w = pw, h = h }
     end
 end
-
--- ======================================================================
--- Draw
--- ======================================================================
 
 function PCPopup:draw(ctx)
     if not self:isActive() then return end
@@ -377,8 +337,6 @@ function PCPopup:_drawFooter(L, cfg, fonts)
     love.graphics.print(msg, math.floor(L.wx + 14), math.floor(L.wy + L.wh - L.footerH + 4))
 end
 
--- ---- Items tab ---------------------------------------------------
-
 function PCPopup:_drawItemsTab(L, cfg, fonts)
     local pc = self:_service("PCService")
     local game = self:_service("GameService")
@@ -420,21 +378,17 @@ function PCPopup:_drawItemList(p, cfg, fonts, dItem, side, title, itemsTable, sl
         return
     end
 
-    -- ADDED: Calculate content height for scrollbar
     local rowH = 22
-    local headerH = 15  -- Section header height
+    local headerH = 15
     local sections = { { title = "BALLS", rows = balls }, { title = "HEALING", rows = heals }, { title = "OTHER", rows = other } }
     local contentHeight = Helpers.sectionedContentHeight(sections, rowH, headerH, 4)
-    
-    local viewportHeight = p.h - 32  -- Available space for scrolling (bottom margin)
+
+    local viewportHeight = p.h - 32
     local scroll, maxScroll = self:_scrollClamp(contentHeight, viewportHeight, side)
 
     local cy = p.y + 30 - scroll
     local maxCy = p.y + p.h - 4
-    -- Single source of truth for "what's actually visible": the same
-    -- rect clips drawing (below) and gates itemrow hit-tests (in
-    -- drawSec), so a row scrolled above this viewport can no longer be
-    -- tapped just because its unclipped y/h still overlaps a tap.
+
     local viewport = Viewport.new(p.x, p.y + 28, p.w, p.h - 32)
     viewport:clipDraw()
 
@@ -480,8 +434,6 @@ function PCPopup:_drawItemList(p, cfg, fonts, dItem, side, title, itemsTable, sl
     )
 end
 
--- ---- Boxes tab ----------------------------------------------------
-
 function PCPopup:_drawBoxesTab(L, cfg, fonts)
     local pc = self:_service("PCService")
     local game = self:_service("GameService")
@@ -517,14 +469,13 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
     Colors.set(cfg.COL.dim, 1)
     love.graphics.print(countStr, math.floor(p.x + p.w - 8 - f11:getWidth(countStr)), math.floor(p.y + 9))
 
-    -- Compact 45px rows: fits all 6 pokemon + header in ~300px
     local ry = p.y + 26
     local rh = 45
-    
+
     for i = 1, 6 do
         local y = ry + (i - 1) * rh
         if y + rh > p.y + p.h then break end
-        
+
         local mon = party[i]
         self:_hitRegion(p.x + 4, y, p.w - 8, rh - 2, "monslot", { loc = "party", box = nil, index = i, mon = mon })
         local held = self.heldMon and self.heldMon.src.loc == "party" and self.heldMon.src.index == i
@@ -538,7 +489,7 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
         love.graphics.rectangle("fill", math.floor(p.x + 4), math.floor(y), math.floor(p.w - 8), rh - 2)
 
         if mon then
-            -- 32px sprite
+
             local img = sprites:getSprite(mon.species, dPoke)
             local ss = 32
             if img then
@@ -547,7 +498,7 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
                 Colors.set(cfg.COL.text, 1)
                 love.graphics.draw(img, math.floor(p.x + 6), math.floor(y + 6), 0, sc, sc)
             end
-            
+
             local nx = p.x + 6 + ss + 6
             local def = dPoke[mon.species]
             local name = Helpers.sanitizeName(mon.nickname or (def and def.name) or mon.species)
@@ -555,13 +506,11 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
             love.graphics.setFont(f11)
             Colors.set(held and cfg.COL.dim or cfg.COL.text, 1)
             love.graphics.print(name, math.floor(nx), math.floor(y + 2))
-            
-            -- Lv X on same line as name
+
             local lvStr = "Lv" .. (mon.level or 1)
             local lvW = f11:getWidth(lvStr)
             love.graphics.print(lvStr, math.floor(p.x + p.w - 8 - lvW), math.floor(y + 2))
-            
-            -- Status ailment tag (PSN, BRN, etc.)
+
             if mon.status and mon.status ~= "" and mon.status ~= "OK" then
                 local statusStr = tostring(mon.status)
                 local f9 = fonts:getFont(9)
@@ -569,14 +518,9 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
                 Colors.set(cfg.COL.lo, 1)
                 love.graphics.print("[" .. statusStr .. "]", math.floor(nx + f11:getWidth(name) + 4), math.floor(y + 2))
             end
-            
-            -- XP progress. Unlike PokemonPanel's main party view, this
-            -- panel always draws the bar (never hides it for unknown
-            -- data), so an unavailable result defaults to 0 rather than
-            -- being left nil.
+
             local xpProg = Helpers.expProgress(growth, def, mon, rates) or 0
-            
-            -- Types (full names) with color coding
+
             local typeY = y + 14
             local f9 = fonts:getFont(9)
             love.graphics.setFont(f9)
@@ -602,21 +546,18 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
                     love.graphics.print(typeName, math.floor(typeX), math.floor(typeY))
                 end
             end
-            
-            -- HP bar + values (right-aligned for fixed-width 000/000)
+
             local mx = (mon.stats and mon.stats.hp) or mon.hp or 1
             local hp = mon.hp or mx
             local frac = mx > 0 and hp / mx or 0
-            
-            -- HP values: right-aligned, fixed width
+
             local hpStr = string.format("%3d/%3d", hp, mx)
             local f9b = fonts:getFont(9)
             love.graphics.setFont(f9b)
             Colors.set(cfg.COL.dim, 1)
             local hpW = f9b:getWidth(hpStr)
             love.graphics.print(hpStr, math.floor(p.x + p.w - 8 - hpW), math.floor(typeY))
-            
-            -- HP bar (below name/level line)
+
             local barW = (p.x + p.w - 8 - hpW - 4) - nx
             local hpBarY = y + 26
             Colors.set({ 0.12, 0.12, 0.14 }, 1)
@@ -625,8 +566,7 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
                 Colors.set(Colors.hpColor(frac), 1)
                 love.graphics.rectangle("fill", math.floor(nx), math.floor(hpBarY), math.floor(barW * frac), 3)
             end
-            
-            -- EXP bar (thin, below HP bar)
+
             local expBarY = hpBarY + 4
             Colors.set({ 0.12, 0.12, 0.14 }, 1)
             love.graphics.rectangle("fill", math.floor(nx), math.floor(expBarY), math.floor(barW), 2)
@@ -659,7 +599,6 @@ function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc)
     Colors.set(cfg.COL.text, 1)
     love.graphics.print("BOXES", math.floor(p.x + 8), math.floor(p.y + 6))
 
-    -- nav: [<]  Box N  cnt/cap  [>]
     local navY = p.y + 6
     local navW = 22
     local label = "Box " .. cur .. "  " .. #box .. "/" .. cap
@@ -688,8 +627,6 @@ function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc)
     Colors.set(cfg.COL.text, 1)
     love.graphics.print(">", math.floor(nextX + 8), math.floor(navY + 2))
 
-    -- rail of all boxes -- skipped when there isn't enough width per tab
-    -- to tap reliably; the nav arrows above always work regardless.
     local railY = p.y + 30
     local railH = 22
     local railGap = 2

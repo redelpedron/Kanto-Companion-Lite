@@ -1,13 +1,10 @@
-
---- SpriteService: centralized sprite cache with weak references.
--- Prevents duplicate Image objects and memory bloat.
 local SpriteService = {}
 SpriteService.__index = SpriteService
 
 function SpriteService.new(locator)
     local self = setmetatable({}, SpriteService)
     self._locator = locator
-    self._cache = setmetatable({}, { __mode = "v" })  -- weak values
+    self._cache = setmetatable({}, { __mode = "v" })
     return self
 end
 

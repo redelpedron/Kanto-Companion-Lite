@@ -1,5 +1,3 @@
-
---- Colors: pure helper functions for color manipulation.
 local Colors = {}
 
 function Colors.set(c, a)
@@ -12,9 +10,6 @@ function Colors.hpColor(frac)
     else return {0.95, 0.3, 0.3} end
 end
 
--- Same green/yellow/red ramp as hpColor, but a fainted (0 HP) Pokémon
--- reads as a flat gray "empty" bar instead of red "critical" -- red
--- implies still fighting at dangerously low HP, which isn't true at 0.
 function Colors.hpBarColor(frac)
     if frac <= 0 then return {0.45, 0.45, 0.48} end
     return Colors.hpColor(frac)
@@ -26,9 +21,6 @@ function Colors.fpsColor(fps)
     else return {0.95, 0.3, 0.3} end
 end
 
--- Third return value (isDay) is additive -- existing 2-value call sites
--- are unaffected, new call sites can use it to pick a sun/moon icon
--- without re-deriving the day/night split themselves.
 function Colors.timeOfDayColor(hour)
     local isDay = hour >= 6 and hour < 18
     if isDay then

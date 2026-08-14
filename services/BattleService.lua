@@ -1,5 +1,3 @@
-
---- BattleService: detects battle state and extracts enemy / player mon data.
 local BattleService = {}
 BattleService.__index = BattleService
 
@@ -42,9 +40,6 @@ function BattleService:getPlayerActiveMon()
     return battle and battle.player and battle.player.mon
 end
 
--- Trainer battles carry a `battle.trainer` table (see e.g. how
--- eevee_three_stones overrides its `.name` for custom encounters); wild
--- encounters have none. Used to gate and label the Rival tab.
 function BattleService:getEnemyTrainer()
     local battle = self:currentBattle()
     return battle and battle.trainer or nil
@@ -59,10 +54,6 @@ function BattleService:isTrainerBattle()
     return self:getEnemyTrainer() ~= nil
 end
 
--- Full enemy roster for the Rival tab. The roster lives under
--- `trainer.parties`, itself a table of alternate teams; `trainer.index`
--- selects which one is active this battle. Older field-name guesses
--- kept as a fallback for any trainer type that doesn't match this shape.
 function BattleService:getEnemyParty()
     local battle  = self:currentBattle()
     local trainer = battle and battle.trainer
@@ -101,7 +92,6 @@ function BattleService:getEnemyData()
     local dPoke = gameService:getPokemonData()
     local def = dPoke[eMon.species]
 
-    -- FIX v2.0.1: check pokedex for caught status
     local dex = gameService:getPokedex()
     local caught = false
     if dex and dex.owned then
