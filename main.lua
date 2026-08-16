@@ -1,28 +1,34 @@
 return function(mod)
 
-    local modBase = (mod.path or ("mods/" .. mod.id)):gsub("/+$", "")
+    local engineRequire = require
+    local cache = {}
 
-    local function modLoader(name)
+    local function modRequire(name)
+        local cached = cache[name]
+        if cached ~= nil then
+            if cached == false then return nil end
+            return cached
+        end
+
         local relPath = name:gsub("%.", "/") .. ".lua"
         local src = mod:read(relPath)
         if not src then
-            return ("\n\tno file '%s' in kanto_companion_lite"):format(relPath)
+            return engineRequire(name)
         end
-        local chunk, loadErr = load(src, "@" .. modBase .. "/" .. relPath)
+
+        local chunk, loadErr = load(src, "@" .. mod.id .. "/" .. relPath)
         if not chunk then
             error(("kanto_companion_lite: syntax error in '%s': %s"):format(relPath, loadErr), 0)
         end
-        return chunk
+
+        local result = chunk(name)
+        cache[name] = (result == nil) and false or result
+        return result
     end
 
-    local searchers = package.searchers or package.loaders
-    table.insert(searchers, 1, modLoader)
+    require = modRequire
 
     local AppController = require("core.AppController")
     local app = AppController.new(mod)
     app:init()
-
-    for i, fn in ipairs(searchers) do
-        if fn == modLoader then table.remove(searchers, i) break end
-    end
 end

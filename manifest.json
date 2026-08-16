@@ -1,7 +1,7 @@
 {
   "id": "kanto_companion_lite",
   "name": "Kanto Companion Lite",
-  "version": "2.2.27",
+  "version": "2.3.0",
   "entry": "main.lua",
   "api": 2,
   "conflicts": [
