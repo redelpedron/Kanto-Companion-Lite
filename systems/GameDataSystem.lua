@@ -6,6 +6,14 @@ GameDataSystem.__index = GameDataSystem
 
 local DEFAULT_ENCOUNTER_BUCKETS = { 51, 102, 141, 166, 191, 216, 229, 242, 253, 256 }
 
+local GEN2_SLOT_WEIGHTS = {
+    [7] = { 30, 30, 20, 10, 5, 4, 1 },
+    [3] = { 60, 30, 10 },
+}
+
+local GEN2_TOD_ORDER  = { "MORN", "DAY", "NITE" }
+local GEN2_TOD_LABELS = { MORN = "Morning", DAY = "Day", NITE = "Night" }
+
 function GameDataSystem.new(locator)
     local self = setmetatable({}, GameDataSystem)
     self._locator = locator
@@ -52,12 +60,13 @@ function GameDataSystem:_buildParty(ctx)
             hp = mon.hp or 0,
             maxhp = (mon.stats and mon.stats.hp) or 1,
             status = mon.status or "",
-            types = def and def.types or {},
+            types = Helpers.dedupeTypes(def and def.types),
             moves = mon.moves or {},
             active = (ctx.activeMon ~= nil and mon == ctx.activeMon),
             xpProgress = xpProg,
             xpToNext = xpNext,
             pokemonData = ctx.dPoke,
+            gender = Helpers.normalizeGender(mon.gender),
         }
     end
     return party
@@ -106,7 +115,7 @@ function GameDataSystem:_buildRival(ctx)
             hp = hp,
             maxhp = maxhp,
             status = status,
-            types = def and def.types or {},
+            types = Helpers.dedupeTypes(def and def.types),
             active = isActive,
             pokemonData = ctx.dPoke,
         }
@@ -117,7 +126,12 @@ end
 function GameDataSystem:_buildTrainer(ctx)
     local dex = self.gameService:getPokedex()
     local badgeCount = 0
-    if ctx.badges and ctx.data then
+    if type(ctx.save.player) == "table" and type(ctx.save.player.badges) == "table" then
+
+        for _ in pairs(ctx.save.player.badges) do
+            badgeCount = badgeCount + 1
+        end
+    elseif ctx.badges and ctx.data then
         local ok, list = pcall(ctx.badges.list, ctx.data)
         if ok and list then
             for _, e in ipairs(list) do
@@ -126,6 +140,13 @@ function GameDataSystem:_buildTrainer(ctx)
                     badgeCount = badgeCount + 1
                 end
             end
+        end
+    end
+
+    local kantoBadgeCount = 0
+    if type(ctx.save.player) == "table" and type(ctx.save.player.kantoBadges) == "table" then
+        for _ in pairs(ctx.save.player.kantoBadges) do
+            kantoBadgeCount = kantoBadgeCount + 1
         end
     end
 
@@ -140,6 +161,7 @@ function GameDataSystem:_buildTrainer(ctx)
         dexSeen = Math.countTrue(dex.seen),
         dexOwned = Math.countTrue(dex.owned),
         badgeCount = badgeCount,
+        kantoBadgeCount = kantoBadgeCount,
         location = location,
         playTime = self.gameService:getPlayTime(),
     }
@@ -190,6 +212,82 @@ function GameDataSystem:_buildEncounterTable(part, dPoke, buckets)
     return { rate = math.floor((part.rate or 0) / 256 * 100 + 0.5), species = list }
 end
 
+function GameDataSystem:_appendGen2Sections(route, part, mapId, dPoke, kindLabel)
+    if type(part) ~= "table" then return end
+    local entry = part[mapId]
+    if type(entry) ~= "table" or type(entry.slots) ~= "table" then return end
+
+    local function aggregate(slotList)
+        local weights = GEN2_SLOT_WEIGHTS[#slotList]
+        local agg, order = {}, {}
+        for i, slot in ipairs(slotList) do
+            if slot and slot.species then
+                local wt = (weights and weights[i]) or math.floor(100 / #slotList)
+                local a = agg[slot.species]
+                if not a then
+                    a = { species = slot.species, weight = 0, minL = slot.level, maxL = slot.level }
+                    agg[slot.species] = a
+                    order[#order + 1] = a
+                end
+                a.weight = a.weight + wt
+                a.minL = math.min(a.minL, slot.level)
+                a.maxL = math.max(a.maxL, slot.level)
+            end
+        end
+        local list = {}
+        for _, a in ipairs(order) do
+            local d = dPoke[a.species]
+            list[#list + 1] = {
+                name = (d and d.name) or tostring(a.species),
+                species = a.species,
+                pct = a.weight,
+                minLevel = a.minL,
+                maxLevel = a.maxL,
+            }
+        end
+        table.sort(list, function(x, y) return x.pct > y.pct end)
+        return list
+    end
+
+    local function rateFor(tod)
+        local r = entry.rates
+        if type(r) == "table" then
+            r = tod and r[tod]
+        elseif tod == nil then
+            r = entry.rate
+        end
+        if type(r) == "number" then
+            return math.floor(r / 256 * 100 + 0.5)
+        end
+        return nil
+    end
+
+    local sawTod = false
+    for _, tod in ipairs(GEN2_TOD_ORDER) do
+        local todSlots = entry.slots[tod]
+        if type(todSlots) == "table" and #todSlots > 0 then
+            sawTod = true
+            local list = aggregate(todSlots)
+            if #list > 0 then
+                route.sections[#route.sections + 1] = {
+                    title = kindLabel .. " (" .. (GEN2_TOD_LABELS[tod] or tod) .. ")",
+                    tab = { rate = rateFor(tod), species = list },
+                }
+            end
+        end
+    end
+
+    if not sawTod and #entry.slots > 0 and type(entry.slots[1]) == "table" then
+        local list = aggregate(entry.slots)
+        if #list > 0 then
+            route.sections[#route.sections + 1] = {
+                title = kindLabel,
+                tab = { rate = rateFor(nil), species = list },
+            }
+        end
+    end
+end
+
 function GameDataSystem:_buildRoute(ctx)
     local mapId = self.gameService:getCurrentMapId()
     if not mapId then return nil end
@@ -199,13 +297,24 @@ function GameDataSystem:_buildRoute(ctx)
         name = Helpers.formatMapName(mapId),
         grass = nil,
         water = nil,
+        sections = {},
     }
+
+    local ge = ctx.data.gen2Encounters
+    if type(ge) == "table" then
+        self:_appendGen2Sections(route, ge.grass, mapId, ctx.dPoke, "Grass")
+        self:_appendGen2Sections(route, ge.water, mapId, ctx.dPoke, "Water")
+        return route
+    end
+
     local enc = (ctx.data.encounters or {})[mapId]
     if enc then
         local buckets = (ctx.data.constants and ctx.data.constants.encounterBuckets)
                 or DEFAULT_ENCOUNTER_BUCKETS
         route.grass = self:_buildEncounterTable(enc.grass, ctx.dPoke, buckets)
         route.water = self:_buildEncounterTable(enc.water, ctx.dPoke, buckets)
+        if route.grass then route.sections[#route.sections + 1] = { title = "Grass", tab = route.grass } end
+        if route.water then route.sections[#route.sections + 1] = { title = "Water", tab = route.water } end
     end
     return route
 end

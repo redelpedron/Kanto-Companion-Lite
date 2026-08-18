@@ -137,6 +137,26 @@ function Helpers.safeRequire(path)
     return ok and m or nil
 end
 
+function Helpers.normalizeGender(g)
+    if type(g) ~= "string" then return nil end
+    local up = g:upper()
+    if up == "M" or up == "MALE" then return "M" end
+    if up == "F" or up == "FEMALE" then return "F" end
+    return nil
+end
+
+function Helpers.dedupeTypes(types)
+    if type(types) ~= "table" then return {} end
+    local seen, out = {}, {}
+    for _, t in ipairs(types) do
+        if not seen[t] then
+            seen[t] = true
+            out[#out + 1] = t
+        end
+    end
+    return out
+end
+
 function Helpers.formatMapName(mapId)
     if not mapId then return "" end
     return mapId:lower():gsub("_", " "):gsub("(%a)(%w*)", function(a, b)

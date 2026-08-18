@@ -56,6 +56,12 @@ local function drawLandscape(self, cfg, fonts, ctx, showFps)
     x = x + f:getWidth("Badges ")
     drawText((t.badgeCount or 0) .. "/8", cfg.COL.gold)
 
+    if t.kantoBadgeCount and t.kantoBadgeCount > 0 then
+        drawText("Kanto", cfg.COL.dim, false)
+        x = x + f:getWidth("Kanto ")
+        drawText(t.kantoBadgeCount .. "/8", cfg.COL.gold)
+    end
+
     drawText("Played", cfg.COL.dim, false)
     x = x + f:getWidth("Played ")
     drawText(Math.formatPlayTime(t.playTime or 0), cfg.COL.dim)
@@ -209,6 +215,10 @@ local function profileChips(cfg, t, repel)
         { icon = "caught", color = cfg.COL.hi,   text = tostring(t.dexOwned or 0) },
         { icon = "seen",   color = cfg.COL.text, text = tostring(t.dexSeen or 0) },
     }
+
+    if t.kantoBadgeCount and t.kantoBadgeCount > 0 then
+        chips[#chips + 1] = { icon = "badge", color = cfg.COL.gold, text = "K " .. t.kantoBadgeCount .. "/8" }
+    end
     if repel and repel > 0 then
         chips[#chips + 1] = { icon = "dot", color = cfg.COL.mid, text = "Repel " .. repel }
     end

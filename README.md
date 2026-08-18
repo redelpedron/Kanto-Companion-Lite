@@ -1,6 +1,6 @@
 # Kanto Companion Lite
 
-An Android in-game companion for Pokémon Red and Blue, designed to enhance your playthrough with useful information and touch-friendly tools directly over the game.
+An Android in-game companion for Pokémon Red, Blue, and Gold, designed to enhance your playthrough with useful information and touch-friendly tools directly over the game.
 
 Kanto Companion Lite takes inspiration from the original Kanto Companion concept while providing its own Android-focused interface, responsive layouts, and touch-first experience.
 
@@ -20,9 +20,11 @@ Kanto Companion Lite takes inspiration from the original Kanto Companion concept
 
 ## Built On
 
-Kanto Companion Lite is a mod for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp), a native LÖVE2D recreation of Pokémon Red and Blue.
+Kanto Companion Lite is a mod for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp), a native LÖVE2D recreation of Pokémon Red and Blue that has since grown to also run Pokémon Gold.
 
-The companion runs directly inside Gen1Recomp and can be installed through its built-in mod manager (F10 in-game), as described in the Gen1Recomp [README](https://github.com/bryanthaboi/gen1recomp#modding).
+The companion runs directly inside the recomp and can be installed through its built-in mod manager (F10 in-game), as described in the Gen1Recomp [README](https://github.com/bryanthaboi/gen1recomp#modding).
+
+Kanto Companion Lite works the same way on both generations — the overlay, controls, and interfaces described below apply equally whether you're playing Red, Blue, or Gold. A couple of small touches are Gold-specific and called out where relevant.
 
 Kanto Companion Lite does not ship with the original game's ROM or decompiled game assets.
 
@@ -64,7 +66,7 @@ Displays trainer and progression information such as:
 
 - Money
 - Play time
-- Badges
+- Badges (on Gold, both your Johto and, once earned, Kanto badge counts are shown)
 - Pokédex progress
 - Route information
 - Wild Pokémon encounters
@@ -72,7 +74,9 @@ Displays trainer and progression information such as:
 - Level ranges
 - Encounter sprites
 
-During battle, the panel changes into a battle-focused readout.
+On Gold, wild encounters that change with the time of day are broken out into separate morning, day, and night listings, so you can see exactly what's available right now.
+
+During battle, the panel changes into a battle-focused readout, including the opposing trainer's name and full team where applicable.
 
 #### Battle Information
 
@@ -186,10 +190,11 @@ This allows the companion to function naturally on Android devices without requi
 
 Kanto Companion Lite ships without the game's original assets.
 
-Game sprites and other required visual data are obtained from the user's existing Gen1Recomp installation at runtime. The interface uses LÖVE's built-in font.
+Game sprites and other required visual data are obtained from the user's existing Gen1Recomp installation at runtime, for whichever supported game you're playing. The interface uses LÖVE's built-in font.
 
 Where the built-in font does not contain certain symbols, such as gender symbols or specific battle glyphs, safe text equivalents are used.
 
 ## Demos
 
 🎥 [Demos](https://github.com/redelpedron/Kanto-Companion-Lite/releases/tag/demos)
+

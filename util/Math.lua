@@ -15,7 +15,8 @@ function M.countTrue(t)
 end
 
 function M.formatPlayTime(seconds)
-    seconds = math.floor(seconds or 0)
+    if type(seconds) ~= "number" then seconds = 0 end
+    seconds = math.floor(seconds)
     return string.format("%d:%02d", math.floor(seconds / 3600), math.floor(seconds / 60) % 60)
 end
 

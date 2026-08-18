@@ -22,6 +22,8 @@ ConfigService.COL = {
     tabBg       = {0.12, 0.12, 0.18},
     catch       = {0.5, 0.9, 0.5},
     se          = {0.3, 0.9, 0.4},
+    male        = {0.4, 0.7, 1},
+    female      = {1, 0.5, 0.75},
 }
 
 ConfigService.BALL_MULT = {

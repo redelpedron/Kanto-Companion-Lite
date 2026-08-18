@@ -80,6 +80,13 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
         local nameStr = Helpers.sanitizeName(m.name)
         love.graphics.print(nameStr, math.floor(x+36), math.floor(cy))
         local tx = x + 36 + f12:getWidth(nameStr)
+        if m.gender == "M" or m.gender == "F" then
+            Colors.set(m.gender == "M" and cfg.COL.male or cfg.COL.female, 1)
+            local symbol = " " .. m.gender
+            love.graphics.print(symbol, math.floor(tx), math.floor(cy))
+            tx = tx + f12:getWidth(symbol)
+            Colors.set(nameCol, 1)
+        end
         if status and status ~= "" and status ~= "OK" then
             local statusStr = " (" .. tostring(status) .. ")"
             Colors.set(cfg.COL.lo, 1)
@@ -174,6 +181,12 @@ function PokemonPanel:_drawCompactStrip(cfg, fonts, sprites, x, y, w, h)
 
             Colors.set(cfg.COL.text, 1)
             love.graphics.draw(img, math.floor(cellCx - (iw*sc)/2), math.floor(rowY), 0, sc, sc)
+
+            if m.gender == "M" or m.gender == "F" then
+                local dotR = math.max(2, iconSz * 0.08)
+                Colors.set(m.gender == "M" and cfg.COL.male or cfg.COL.female, 1)
+                love.graphics.circle("fill", math.floor(cellCx + iconSz * 0.32), math.floor(rowY + iconSz * 0.92), dotR)
+            end
         end
 
         local hp, maxhp, status = self:_liveStats(m)

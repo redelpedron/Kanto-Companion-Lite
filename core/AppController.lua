@@ -291,7 +291,16 @@ function AppController:_subscribeEvents()
     bus:subscribe("route.updated", function(route)
         local inBattle = locator:resolve("BattleService"):isInBattle()
         if inBattle then return end
-        local hasEnc = route and ((route.grass and #route.grass.species>0) or (route.water and #route.water.species>0))
+
+        local hasEnc = false
+        if route and route.sections then
+            for _, sec in ipairs(route.sections) do
+                if sec.tab and sec.tab.species and #sec.tab.species > 0 then
+                    hasEnc = true
+                    break
+                end
+            end
+        end
         local drawers = {}
         local labels  = {}
         if hasEnc then
@@ -386,6 +395,31 @@ function AppController:_installGameHooks()
     self._origDraw   = nil
     self._ourDraw    = nil
     self._wrappedGame = nil
+    self._overlayDisabled = false
+    self._renderHudFired = false
+
+    local function reportAndDisable(kind, err)
+        if self._overlayDisabled then return end
+        self._overlayDisabled = true
+        self.mod.log:error(("Kanto Companion Lite: overlay %s failed and has been disabled for this session (%s). This can happen on a generation/screen combination the overlay hasn't been verified against yet."):format(kind, tostring(err)))
+    end
+
+    local function tick(dt)
+        if self._overlayDisabled then return end
+        local ok, err = pcall(function() self.life:update(dt) end)
+        if not ok then reportAndDisable("update", err); return end
+        local ok2, err2 = pcall(function() self.life:draw() end)
+        if not ok2 then reportAndDisable("draw", err2) end
+    end
+
+    pcall(function()
+        self.mod.hooks:wrap("render.hud", function(orig, ...)
+            local result = orig(...)
+            self._renderHudFired = true
+            tick(love.timer and love.timer.getDelta() or 0)
+            return result
+        end)
+    end)
 
     local function install()
         local g = self.gameSvc:getGame()
@@ -394,7 +428,6 @@ function AppController:_installGameHooks()
                 self._origUpdate = g.update
                 self._ourUpdate = function(gameSelf, dt)
                     self._origUpdate(gameSelf, dt)
-                    self.life:update(dt)
                 end
                 g.update = self._ourUpdate
                 self._wrappedGame = g
@@ -404,16 +437,17 @@ function AppController:_installGameHooks()
             self._origDraw = love.draw
             self._ourDraw = function(...)
                 if self._origDraw then self._origDraw(...) end
-                self.life:draw()
+                if self._renderHudFired then return end
+                tick(love.timer and love.timer.getDelta() or 0)
             end
             love.draw = self._ourDraw
         end
     end
 
-    self.mod.events:on("game.ready", install)
-    if self.gameSvc:getGame() and self.gameSvc:getGame().save and love then
-        install()
-    end
+    self.mod.events:on("game.ready", function()
+        local ok, err = pcall(install)
+        if not ok then reportAndDisable("install", err) end
+    end)
 end
 
 function AppController:_registerUnload()

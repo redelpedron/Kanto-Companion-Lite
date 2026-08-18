@@ -54,7 +54,8 @@ end
 function PCPopup:update(dt)
     if not self:isActive() then return end
     local game = self:_service("GameService")
-    if not game:isInGame() then self:closePopup() end
+
+    if not game:getSave() then self:closePopup() end
 
     self:_scrollUpdateDrag()
 end
@@ -456,7 +457,8 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
 
     local party = pc:getParty()
     local game = self:_service("GameService")
-    local growth = game:getGrowthSystem() if not growth then growth = {} end
+
+    local growth = game:getGrowthSystem()
     local rates = game:getGrowthRates() or {}
 
     local f14 = fonts:getFont(14)

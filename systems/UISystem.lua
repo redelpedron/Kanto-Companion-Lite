@@ -19,8 +19,10 @@ end
 
 function UISystem:update(dt)
     local visible = self.saveService:isVisible()
-    local inGame  = self._locator:resolve("GameService"):isInGame()
-    local menuOpen= self._locator:resolve("GameService"):isMenuOpen()
+    local gameSvc = self._locator:resolve("GameService")
+
+    local inGame = gameSvc:isInGame()
+    local menuOpen = gameSvc:isMenuOpen()
 
     local shouldShow = visible and inGame and not menuOpen
     for name, comp in pairs(self._components) do

@@ -68,7 +68,16 @@ end
 
 function GameService:getPlayTime()
     local save = self:getSave()
-    return save and (save.playTime or save.playtime or save.timePlayed) or 0
+    local v = save and (save.playTime or save.playtime or save.timePlayed)
+    if type(v) == "number" then return v end
+    if type(v) == "table" then
+
+        local h = tonumber(v.hours) or 0
+        local m = tonumber(v.minutes) or 0
+        local s = tonumber(v.seconds) or 0
+        return h * 3600 + m * 60 + s
+    end
+    return 0
 end
 
 function GameService:getPlayerName()
@@ -78,7 +87,11 @@ end
 
 function GameService:getMoney()
     local save = self:getSave()
-    return (save and save.money) or 0
+
+    local v = save and (save.money or save.gold
+        or (type(save.player) == "table" and save.player.money))
+    if type(v) == "number" then return v end
+    return 0
 end
 
 function GameService:getParty()
@@ -88,7 +101,10 @@ end
 
 function GameService:getPokedex()
     local save = self:getSave()
-    return (save and save.pokedex) or { seen = {}, owned = {} }
+    local dex = save and save.pokedex
+    if type(dex) ~= "table" then return { seen = {}, owned = {} } end
+
+    return { seen = dex.seen or {}, owned = dex.owned or dex.caught or {} }
 end
 
 function GameService:getInventory()
@@ -98,7 +114,9 @@ end
 
 function GameService:getRepelSteps()
     local save = self:getSave()
-    return (save and save.repelSteps) or 0
+    local v = save and save.repelSteps
+    if type(v) == "number" then return v end
+    return 0
 end
 
 function GameService:_safariDebugEnabled()
@@ -208,14 +226,30 @@ function GameService:isInSafariZone()
     return inZone
 end
 
+function GameService:_isInBattleOverride()
+    local ok, result = pcall(function()
+        return self._locator:has("BattleService")
+            and self._locator:resolve("BattleService"):isInBattle()
+    end)
+    return ok and result or false
+end
+
 function GameService:isInGame()
+    if self:_isInBattleOverride() then return true end
+
     local save = self:getSave()
     if not save then return false end
     local party = save.party
     if not party or #party == 0 then return false end
 
     local stk = self:getStack()
-    if not (stk and stk.states and #stk.states > 0) then return false end
+    if not (stk and stk.states and #stk.states > 0) then
+
+        if Helpers.safeRequire("src.core.Game2") then
+            return true
+        end
+        return false
+    end
 
     for i = #stk.states, 1, -1 do
         local state = stk.states[i]
@@ -230,6 +264,8 @@ function GameService:isInGame()
 end
 
 function GameService:isMenuOpen()
+    if self:_isInBattleOverride() then return false end
+
     local stk = self:getStack()
     if not (stk and stk.states and #stk.states > 0) then return false end
 
@@ -250,7 +286,16 @@ end
 
 function GameService:getCurrentMapId()
     local ov = self:getOverworld()
-    return ov and ov.map and ov.map.id
+    local id = ov and ov.map and ov.map.id
+    if type(id) == "string" and id ~= "" then return id end
+
+    local g = self:getGame()
+    local borderKey = g and g.world and g.world.borderKey
+    if type(borderKey) == "string" and borderKey ~= "" then return borderKey end
+    local save = self:getSave()
+    local posMap = save and type(save.position) == "table" and save.position.map
+    if type(posMap) == "string" and posMap ~= "" then return posMap end
+    return nil
 end
 
 function GameService:getGrowthSystem()

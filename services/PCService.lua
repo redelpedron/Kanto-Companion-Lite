@@ -259,12 +259,10 @@ end
 function PCService:canOpen()
     local game = self:_getGameService()
     local save = game:getSave()
-    local stack = game:getStack()
-    local overworld = game:getOverworld()
     if not (save and save.party and #save.party > 0) then return false end
-    if not (stack and overworld and stack.top) then return false end
-    local ok, top = pcall(function() return stack:top() end)
-    if not ok or top ~= overworld then return false end
+
+    if not game:isInGame() then return false end
+    if game:isMenuOpen() then return false end
     local battle = self._locator:has("BattleService") and self._locator:resolve("BattleService")
     if battle and battle:isInBattle() then return false end
     return true

@@ -1,3 +1,5 @@
+local Helpers = require("util.Helpers")
+
 local BattleService = {}
 BattleService.__index = BattleService
 
@@ -17,10 +19,17 @@ function BattleService:currentBattle()
     local gameService = self._locator:resolve("GameService")
     local g = gameService:getGame()
     local stk = g and g.stack
-    if not (stk and stk.states and self._battleStateClass) then return nil end
+    if not (stk and stk.states) then return nil end
     for i = #stk.states, 1, -1 do
-        if getmetatable(stk.states[i]) == self._battleStateClass then
-            return stk.states[i]
+        local state = stk.states[i]
+        if type(state) == "table" then
+            if self._battleStateClass and getmetatable(state) == self._battleStateClass then
+                return state
+            end
+
+            if state.showEnemyHud ~= nil and state.showPlayerHud ~= nil and state.shownMon ~= nil then
+                return state
+            end
         end
     end
     return nil
@@ -30,33 +39,58 @@ function BattleService:isInBattle()
     return self:currentBattle() ~= nil
 end
 
+local function gen2Battle(battle)
+    return battle and type(battle.battle) == "table" and battle.battle or nil
+end
+
 function BattleService:getEnemyMon()
     local battle = self:currentBattle()
-    return battle and battle.enemy and battle.enemy.mon
+    local mon = battle and battle.enemy and battle.enemy.mon
+    if mon then return mon end
+
+    return battle and battle.shownMon and battle.shownMon.enemy or nil
 end
 
 function BattleService:getPlayerActiveMon()
     local battle = self:currentBattle()
-    return battle and battle.player and battle.player.mon
+    local mon = battle and battle.player and battle.player.mon
+    if mon then return mon end
+
+    return battle and battle.shownMon and battle.shownMon.player or nil
 end
 
 function BattleService:getEnemyTrainer()
     local battle = self:currentBattle()
-    return battle and battle.trainer or nil
+    if battle and battle.trainer then return battle.trainer end
+    local bb = gen2Battle(battle)
+    return bb and bb.trainer or nil
+end
+
+function BattleService:getEnemyTrainerClass()
+    local battle = self:currentBattle()
+    return battle and battle.enemyTrainerClass or nil
 end
 
 function BattleService:getEnemyTrainerName()
     local trainer = self:getEnemyTrainer()
-    return trainer and trainer.name or nil
+    if trainer and trainer.name then
+        return trainer.name
+    end
+
+    local class = self:getEnemyTrainerClass()
+    if class then
+        return Helpers.formatMapName(class)
+    end
+    return nil
 end
 
 function BattleService:isTrainerBattle()
-    return self:getEnemyTrainer() ~= nil
+    return self:getEnemyTrainer() ~= nil or self:getEnemyTrainerClass() ~= nil
 end
 
 function BattleService:getEnemyParty()
     local battle  = self:currentBattle()
-    local trainer = battle and battle.trainer
+    local trainer = self:getEnemyTrainer()
     local enemy   = battle and battle.enemy
 
     if trainer then
@@ -82,6 +116,19 @@ function BattleService:getEnemyParty()
     if enemy and enemy.mon then
         return { enemy.mon }
     end
+
+    local bb = gen2Battle(battle)
+    if bb then
+        local roster = bb.enemyParty or bb.party
+        if type(roster) == "table" and #roster > 0 then
+            return roster
+        end
+    end
+
+    local shownEnemy = battle and battle.shownMon and battle.shownMon.enemy
+    if shownEnemy then
+        return { shownEnemy }
+    end
     return {}
 end
 
@@ -98,13 +145,15 @@ function BattleService:getEnemyData()
         caught = dex.owned[eMon.species] == true
     end
 
+    local types = (eMon.types and #eMon.types > 0) and eMon.types or (def and def.types) or {}
+
     return {
-        name = eMon.nickname or (def and def.name) or tostring(eMon.species),
+        name = eMon.nickname or eMon.name or (def and def.name) or tostring(eMon.species),
         species = eMon.species,
         level = eMon.level or 0,
         hp = eMon.hp or 0,
-        maxhp = (eMon.stats and eMon.stats.hp) or 1,
-        types = def and def.types or {},
+        maxhp = (eMon.stats and eMon.stats.hp) or eMon.maxHp or 1,
+        types = Helpers.dedupeTypes(types),
         catchRate = def and def.catchRate or 0,
         status = eMon.status or "",
         caught = caught,
