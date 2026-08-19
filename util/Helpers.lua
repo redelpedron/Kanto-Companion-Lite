@@ -172,6 +172,15 @@ function Helpers.sanitizeName(name)
     return name
 end
 
+function Helpers.decodeTrainerName(name)
+    if not name then return name end
+    name = tostring(name)
+    name = name:gsub("<PK>%s*<MN>", "PKMN")
+    name = name:gsub("<%u+>", "")
+    name = name:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    return name
+end
+
 local HEAL_IDS = {
     POTION=true, SUPER_POTION=true, HYPER_POTION=true, MAX_POTION=true, FULL_RESTORE=true,
     FULL_HEAL=true, ANTIDOTE=true, BURN_HEAL=true, ICE_HEAL=true, AWAKENING=true, PARLYZ_HEAL=true,

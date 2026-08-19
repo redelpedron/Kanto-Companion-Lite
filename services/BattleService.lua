@@ -76,7 +76,7 @@ end
 function BattleService:getEnemyTrainerName()
     local trainer = self:getEnemyTrainer()
     if trainer and trainer.name then
-        return trainer.name
+        return Helpers.decodeTrainerName(trainer.name)
     end
 
     local class = self:getEnemyTrainerClass()

@@ -70,8 +70,14 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
         end
         local hp, maxhp, status = self:_liveStats(m)
 
+        local known = maxhp ~= nil
+        local fainted = known and (hp or 0) <= 0
+
         local nameCol = cfg.COL.text
-        if self.enemyTypes and te:hasSuperEffectiveMove(m, self.enemyTypes) then
+        if fainted then
+
+            nameCol = cfg.COL.dim
+        elseif self.enemyTypes and te:hasSuperEffectiveMove(m, self.enemyTypes) then
             nameCol = cfg.COL.se
         end
         local f12 = fonts:getFont(12)
@@ -79,6 +85,13 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
         Colors.set(nameCol, 1)
         local nameStr = Helpers.sanitizeName(m.name)
         love.graphics.print(nameStr, math.floor(x+36), math.floor(cy))
+        if fainted then
+
+            local strikeY = math.floor(cy + f12:getHeight() * 0.55)
+            love.graphics.setLineWidth(1)
+            Colors.set(nameCol, 1)
+            love.graphics.line(math.floor(x+36), strikeY, math.floor(x+36+f12:getWidth(nameStr)), strikeY)
+        end
         local tx = x + 36 + f12:getWidth(nameStr)
         if m.gender == "M" or m.gender == "F" then
             Colors.set(m.gender == "M" and cfg.COL.male or cfg.COL.female, 1)
@@ -87,7 +100,8 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
             tx = tx + f12:getWidth(symbol)
             Colors.set(nameCol, 1)
         end
-        if status and status ~= "" and status ~= "OK" then
+
+        if (not fainted) and status and status ~= "" and status ~= "OK" then
             local statusStr = " (" .. Helpers.formatStatus(status) .. ")"
             Colors.set(cfg.COL.lo, 1)
             love.graphics.print(statusStr, math.floor(tx), math.floor(cy))
@@ -112,7 +126,6 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
         local lvStr = "Lv" .. tostring(m.level)
         love.graphics.print(lvStr, math.floor(x+w-8-f10b:getWidth(lvStr)), math.floor(cy))
 
-        local known = maxhp ~= nil
         local frac = known and Math.clamp((hp or 0) / math.max(1, maxhp), 0, 1) or 1
         local barW = w - 44 - 50
         local barY = cy + 11
@@ -192,6 +205,7 @@ function PokemonPanel:_drawCompactStrip(cfg, fonts, sprites, x, y, w, h)
         local hp, maxhp, status = self:_liveStats(m)
 
         local known = maxhp ~= nil
+        local fainted = known and (hp or 0) <= 0
         local frac = known and Math.clamp((hp or 0) / math.max(1, maxhp), 0, 1) or 0
         local hpStr = known and (tostring(hp or 0) .. "/" .. tostring(maxhp)) or "?/?"
 
@@ -199,7 +213,7 @@ function PokemonPanel:_drawCompactStrip(cfg, fonts, sprites, x, y, w, h)
         Colors.set(Colors.hpBarColor(frac), 1)
         love.graphics.print(hpStr, math.floor(cellCx - fHp:getWidth(hpStr)/2), math.floor(rowY + iconSz + 2))
 
-        if status and status ~= "" and status ~= "OK" then
+        if (not fainted) and status and status ~= "" and status ~= "OK" then
             local statusStr = Helpers.formatStatus(status)
             love.graphics.setFont(fStatus)
             Colors.set(cfg.COL.lo, 1)
