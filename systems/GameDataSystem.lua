@@ -8,12 +8,20 @@ local DEFAULT_ENCOUNTER_BUCKETS = { 51, 102, 141, 166, 191, 216, 229, 242, 253, 
 
 local GEN2_PERIOD_LABEL = { MORN = "Morning", DAY = "Day", NITE = "Night" }
 
-local function gen2TimePeriod()
+local function gen2TimePeriodFromDeviceClock()
     local ok, now = pcall(os.date, "*t")
     local hour = (ok and now and now.hour) or 12
     if hour >= 4 and hour < 10 then return "MORN"
     elseif hour >= 10 and hour < 20 then return "DAY"
     else return "NITE" end
+end
+
+local function resolveGen2Period(gameService)
+    local confirmed = gameService and gameService:getGen2TimeOfDay()
+    if confirmed then
+        return confirmed, "engine"
+    end
+    return gen2TimePeriodFromDeviceClock(), "device"
 end
 
 function GameDataSystem.new(locator)
@@ -217,18 +225,47 @@ end
 
 function GameDataSystem:_buildGen2EncounterTable(entry, dPoke, buckets, period)
     if type(entry) ~= "table" or type(entry.slots) ~= "table" then return nil end
-    local todSlots = entry.slots[period]
-    if type(todSlots) ~= "table" then return nil end
 
-    local rate = 0
-    if type(entry.rates) == "table" then
-        rate = entry.rates[period] or 0
-    elseif type(entry.rates) == "number" then
-        rate = entry.rates
+    local slots, rate, ownBuckets, timeBased
+    local todSlots = entry.slots[period]
+    if type(todSlots) == "table" then
+        slots = todSlots
+        timeBased = true
+        if type(entry.rates) == "table" then
+            rate = entry.rates[period] or 0
+        elseif type(entry.rates) == "number" then
+            rate = entry.rates
+        else
+            rate = 0
+        end
+    elseif #entry.slots > 0 then
+        slots = entry.slots
+        timeBased = false
+        if type(entry.rate) == "number" then
+            rate = entry.rate
+        elseif type(entry.rates) == "number" then
+            rate = entry.rates
+        else
+            rate = 0
+        end
+        if not entry.buckets then
+
+            local n = #slots
+            local even = {}
+            for i = 1, n do
+                even[i] = math.floor(i * 256 / n + 0.5)
+            end
+            even[n] = 256
+            ownBuckets = even
+        end
+    else
+        return nil
     end
 
-    local part = { slots = todSlots, rate = rate, buckets = entry.buckets }
-    return self:_buildEncounterTable(part, dPoke, buckets)
+    local part = { slots = slots, rate = rate, buckets = entry.buckets or ownBuckets }
+    local built = self:_buildEncounterTable(part, dPoke, buckets)
+    if built then built.timeBased = timeBased end
+    return built
 end
 
 function GameDataSystem:_buildRoute(ctx)
@@ -252,16 +289,21 @@ function GameDataSystem:_buildRoute(ctx)
 
     if (not route.grass) and (not route.water) and type(ctx.data.gen2Encounters) == "table" then
         local ge = ctx.data.gen2Encounters
-        local period = gen2TimePeriod()
+        local period, source = resolveGen2Period(self.gameService)
         local periodLabel = GEN2_PERIOD_LABEL[period] or period
+        if source == "device" then
+
+            periodLabel = periodLabel .. " - Guessed"
+        end
 
         local grassEntry = type(ge.grass) == "table" and ge.grass[mapId] or nil
         local waterEntry = type(ge.water) == "table" and ge.water[mapId] or nil
 
         local grass = self:_buildGen2EncounterTable(grassEntry, ctx.dPoke, buckets, period)
         local water = self:_buildGen2EncounterTable(waterEntry, ctx.dPoke, buckets, period)
-        if grass then grass.period = periodLabel end
-        if water then water.period = periodLabel end
+
+        if grass and grass.timeBased then grass.period = periodLabel end
+        if water and water.timeBased then water.period = periodLabel end
         route.grass, route.water = grass, water
     end
 

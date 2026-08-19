@@ -61,6 +61,17 @@ function GameService:getOverworld()
     return g and g.overworld
 end
 
+function GameService:getGen2TimeOfDay()
+    local g = self._game
+    local world = g and g.world
+    if type(world) ~= "table" then return nil end
+    local v = world.tod or world.daytime
+    if type(v) ~= "string" then return nil end
+    v = v:upper()
+    if v == "MORN" or v == "DAY" or v == "NITE" then return v end
+    return nil
+end
+
 function GameService:getStack()
     local g = self._game
     return g and g.stack
