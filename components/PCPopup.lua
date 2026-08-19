@@ -514,7 +514,7 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
             love.graphics.print(lvStr, math.floor(p.x + p.w - 8 - lvW), math.floor(y + 2))
 
             if mon.status and mon.status ~= "" and mon.status ~= "OK" then
-                local statusStr = tostring(mon.status)
+                local statusStr = Helpers.formatStatus(mon.status)
                 local f9 = fonts:getFont(9)
                 love.graphics.setFont(f9)
                 Colors.set(cfg.COL.lo, 1)

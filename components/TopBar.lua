@@ -52,8 +52,9 @@ local function drawLandscape(self, cfg, fonts, ctx, showFps)
     drawText(name, cfg.COL.text)
     drawText("$" .. tostring(t.money or 0), cfg.COL.gold)
 
-    drawText("Badges", cfg.COL.dim, false)
-    x = x + f:getWidth("Badges ")
+    local badgeLabel = self:_service("GameService"):isGen2() and "Johto" or "Badges"
+    drawText(badgeLabel, cfg.COL.dim, false)
+    x = x + f:getWidth(badgeLabel .. " ")
     drawText((t.badgeCount or 0) .. "/8", cfg.COL.gold)
 
     if t.kantoBadgeCount and t.kantoBadgeCount > 0 then

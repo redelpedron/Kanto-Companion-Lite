@@ -228,7 +228,7 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
     love.graphics.print(nameStr, math.floor(x+geom.nameX), math.floor(cy))
     if en.status and en.status ~= "" and en.status ~= "OK" then
         Colors.set(cfg.COL.lo, 1)
-        love.graphics.print(" (" .. tostring(en.status) .. ")", math.floor(x+geom.nameX+fName:getWidth(nameStr)), math.floor(cy))
+        love.graphics.print(" (" .. Helpers.formatStatus(en.status) .. ")", math.floor(x+geom.nameX+fName:getWidth(nameStr)), math.floor(cy))
     end
     local lvStr = "Lv" .. tostring(en.level or "?")
     love.graphics.setFont(f10)

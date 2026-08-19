@@ -291,16 +291,7 @@ function AppController:_subscribeEvents()
     bus:subscribe("route.updated", function(route)
         local inBattle = locator:resolve("BattleService"):isInBattle()
         if inBattle then return end
-
-        local hasEnc = false
-        if route and route.sections then
-            for _, sec in ipairs(route.sections) do
-                if sec.tab and sec.tab.species and #sec.tab.species > 0 then
-                    hasEnc = true
-                    break
-                end
-            end
-        end
+        local hasEnc = route and ((route.grass and #route.grass.species>0) or (route.water and #route.water.species>0))
         local drawers = {}
         local labels  = {}
         if hasEnc then

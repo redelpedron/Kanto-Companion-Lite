@@ -6,13 +6,15 @@ GameDataSystem.__index = GameDataSystem
 
 local DEFAULT_ENCOUNTER_BUCKETS = { 51, 102, 141, 166, 191, 216, 229, 242, 253, 256 }
 
-local GEN2_SLOT_WEIGHTS = {
-    [7] = { 30, 30, 20, 10, 5, 4, 1 },
-    [3] = { 60, 30, 10 },
-}
+local GEN2_PERIOD_LABEL = { MORN = "Morning", DAY = "Day", NITE = "Night" }
 
-local GEN2_TOD_ORDER  = { "MORN", "DAY", "NITE" }
-local GEN2_TOD_LABELS = { MORN = "Morning", DAY = "Day", NITE = "Night" }
+local function gen2TimePeriod()
+    local ok, now = pcall(os.date, "*t")
+    local hour = (ok and now and now.hour) or 12
+    if hour >= 4 and hour < 10 then return "MORN"
+    elseif hour >= 10 and hour < 20 then return "DAY"
+    else return "NITE" end
+end
 
 function GameDataSystem.new(locator)
     local self = setmetatable({}, GameDataSystem)
@@ -91,7 +93,8 @@ function GameDataSystem:_buildRival(ctx)
         local hp, maxhp, status
         if isActive then
             hp     = enemyActiveMon.hp
-            maxhp  = enemyActiveMon.stats and enemyActiveMon.stats.hp
+
+            maxhp  = (enemyActiveMon.stats and enemyActiveMon.stats.hp) or enemyActiveMon.maxHp
             status = enemyActiveMon.status
 
             local prev = self._rivalKnown[i]
@@ -212,80 +215,20 @@ function GameDataSystem:_buildEncounterTable(part, dPoke, buckets)
     return { rate = math.floor((part.rate or 0) / 256 * 100 + 0.5), species = list }
 end
 
-function GameDataSystem:_appendGen2Sections(route, part, mapId, dPoke, kindLabel)
-    if type(part) ~= "table" then return end
-    local entry = part[mapId]
-    if type(entry) ~= "table" or type(entry.slots) ~= "table" then return end
+function GameDataSystem:_buildGen2EncounterTable(entry, dPoke, buckets, period)
+    if type(entry) ~= "table" or type(entry.slots) ~= "table" then return nil end
+    local todSlots = entry.slots[period]
+    if type(todSlots) ~= "table" then return nil end
 
-    local function aggregate(slotList)
-        local weights = GEN2_SLOT_WEIGHTS[#slotList]
-        local agg, order = {}, {}
-        for i, slot in ipairs(slotList) do
-            if slot and slot.species then
-                local wt = (weights and weights[i]) or math.floor(100 / #slotList)
-                local a = agg[slot.species]
-                if not a then
-                    a = { species = slot.species, weight = 0, minL = slot.level, maxL = slot.level }
-                    agg[slot.species] = a
-                    order[#order + 1] = a
-                end
-                a.weight = a.weight + wt
-                a.minL = math.min(a.minL, slot.level)
-                a.maxL = math.max(a.maxL, slot.level)
-            end
-        end
-        local list = {}
-        for _, a in ipairs(order) do
-            local d = dPoke[a.species]
-            list[#list + 1] = {
-                name = (d and d.name) or tostring(a.species),
-                species = a.species,
-                pct = a.weight,
-                minLevel = a.minL,
-                maxLevel = a.maxL,
-            }
-        end
-        table.sort(list, function(x, y) return x.pct > y.pct end)
-        return list
+    local rate = 0
+    if type(entry.rates) == "table" then
+        rate = entry.rates[period] or 0
+    elseif type(entry.rates) == "number" then
+        rate = entry.rates
     end
 
-    local function rateFor(tod)
-        local r = entry.rates
-        if type(r) == "table" then
-            r = tod and r[tod]
-        elseif tod == nil then
-            r = entry.rate
-        end
-        if type(r) == "number" then
-            return math.floor(r / 256 * 100 + 0.5)
-        end
-        return nil
-    end
-
-    local sawTod = false
-    for _, tod in ipairs(GEN2_TOD_ORDER) do
-        local todSlots = entry.slots[tod]
-        if type(todSlots) == "table" and #todSlots > 0 then
-            sawTod = true
-            local list = aggregate(todSlots)
-            if #list > 0 then
-                route.sections[#route.sections + 1] = {
-                    title = kindLabel .. " (" .. (GEN2_TOD_LABELS[tod] or tod) .. ")",
-                    tab = { rate = rateFor(tod), species = list },
-                }
-            end
-        end
-    end
-
-    if not sawTod and #entry.slots > 0 and type(entry.slots[1]) == "table" then
-        local list = aggregate(entry.slots)
-        if #list > 0 then
-            route.sections[#route.sections + 1] = {
-                title = kindLabel,
-                tab = { rate = rateFor(nil), species = list },
-            }
-        end
-    end
+    local part = { slots = todSlots, rate = rate, buckets = entry.buckets }
+    return self:_buildEncounterTable(part, dPoke, buckets)
 end
 
 function GameDataSystem:_buildRoute(ctx)
@@ -297,25 +240,31 @@ function GameDataSystem:_buildRoute(ctx)
         name = Helpers.formatMapName(mapId),
         grass = nil,
         water = nil,
-        sections = {},
     }
-
-    local ge = ctx.data.gen2Encounters
-    if type(ge) == "table" then
-        self:_appendGen2Sections(route, ge.grass, mapId, ctx.dPoke, "Grass")
-        self:_appendGen2Sections(route, ge.water, mapId, ctx.dPoke, "Water")
-        return route
-    end
+    local buckets = (ctx.data.constants and ctx.data.constants.encounterBuckets)
+            or DEFAULT_ENCOUNTER_BUCKETS
 
     local enc = (ctx.data.encounters or {})[mapId]
     if enc then
-        local buckets = (ctx.data.constants and ctx.data.constants.encounterBuckets)
-                or DEFAULT_ENCOUNTER_BUCKETS
         route.grass = self:_buildEncounterTable(enc.grass, ctx.dPoke, buckets)
         route.water = self:_buildEncounterTable(enc.water, ctx.dPoke, buckets)
-        if route.grass then route.sections[#route.sections + 1] = { title = "Grass", tab = route.grass } end
-        if route.water then route.sections[#route.sections + 1] = { title = "Water", tab = route.water } end
     end
+
+    if (not route.grass) and (not route.water) and type(ctx.data.gen2Encounters) == "table" then
+        local ge = ctx.data.gen2Encounters
+        local period = gen2TimePeriod()
+        local periodLabel = GEN2_PERIOD_LABEL[period] or period
+
+        local grassEntry = type(ge.grass) == "table" and ge.grass[mapId] or nil
+        local waterEntry = type(ge.water) == "table" and ge.water[mapId] or nil
+
+        local grass = self:_buildGen2EncounterTable(grassEntry, ctx.dPoke, buckets, period)
+        local water = self:_buildGen2EncounterTable(waterEntry, ctx.dPoke, buckets, period)
+        if grass then grass.period = periodLabel end
+        if water then water.period = periodLabel end
+        route.grass, route.water = grass, water
+    end
+
     return route
 end
 

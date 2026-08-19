@@ -226,6 +226,24 @@ function GameService:isInSafariZone()
     return inZone
 end
 
+function GameService:isGen2()
+    if self._isGen2 ~= nil then return self._isGen2 end
+
+    local save = self:getSave()
+    if type(save) == "table" and type(save.pokedex) == "table" then
+        if save.pokedex.caught ~= nil then
+            self._isGen2 = true
+            return true
+        end
+        if save.pokedex.owned ~= nil then
+            self._isGen2 = false
+            return false
+        end
+    end
+
+    return Helpers.safeRequire("src.core.Game2") ~= nil
+end
+
 function GameService:_isInBattleOverride()
     local ok, result = pcall(function()
         return self._locator:has("BattleService")
@@ -245,7 +263,7 @@ function GameService:isInGame()
     local stk = self:getStack()
     if not (stk and stk.states and #stk.states > 0) then
 
-        if Helpers.safeRequire("src.core.Game2") then
+        if self:isGen2() then
             return true
         end
         return false
@@ -291,7 +309,12 @@ function GameService:getCurrentMapId()
 
     local g = self:getGame()
     local borderKey = g and g.world and g.world.borderKey
-    if type(borderKey) == "string" and borderKey ~= "" then return borderKey end
+    if type(borderKey) == "string" and borderKey ~= "" then
+
+        local stripped = borderKey:gsub("^%a+|", "")
+        if stripped ~= "" then borderKey = stripped end
+        return borderKey
+    end
     local save = self:getSave()
     local posMap = save and type(save.position) == "table" and save.position.map
     if type(posMap) == "string" and posMap ~= "" then return posMap end

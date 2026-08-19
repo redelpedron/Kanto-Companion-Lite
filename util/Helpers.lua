@@ -194,8 +194,27 @@ function Helpers.isHealItem(id)
         or id:find("ELIXER", 1, true) ~= nil
 end
 
+local STATUS_ABBR = {
+    PSN = "PSN", POISON = "PSN", POISONED = "PSN",
+    PAR = "PAR", PARALYZE = "PAR", PARALYZED = "PAR", PARALYSIS = "PAR",
+    BRN = "BRN", BURN = "BRN", BURNED = "BRN",
+    FRZ = "FRZ", FREEZE = "FRZ", FROZEN = "FRZ",
+    SLP = "SLP", SLEEP = "SLP", ASLEEP = "SLP",
+    TOX = "TOX", TOXIC = "TOX", BADLYPOISONED = "TOX",
+}
+
+function Helpers.formatStatus(status)
+    if status == nil then return status end
+    local s = tostring(status)
+    if s == "" then return s end
+    local key = s:upper():gsub("[^%u]", "")
+    return STATUS_ABBR[key] or s
+end
+
 function Helpers.expProgress(growth, def, mon, rates)
-    if not (growth and def and def.growthRate and mon.exp and mon.level) then
+
+    local exp = mon.exp or mon.experience
+    if not (growth and def and def.growthRate and exp and mon.level) then
         return nil, nil
     end
     local cur = growth.expForLevel(def.growthRate, mon.level, rates)
@@ -203,7 +222,7 @@ function Helpers.expProgress(growth, def, mon, rates)
     if mon.level >= 100 or nxt <= cur then
         return 1, 0
     end
-    local prog = math.max(0, math.min(1, (mon.exp - cur) / (nxt - cur)))
+    local prog = math.max(0, math.min(1, (exp - cur) / (nxt - cur)))
     local next_ = math.max(0, nxt - cur)
     return prog, next_
 end

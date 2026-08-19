@@ -38,31 +38,24 @@ function RoutePanel:init()
     end)
 end
 
-function RoutePanel:_sections()
-    if not self.route then return {} end
-    if self.route.sections then return self.route.sections end
-    local sections = {}
-    if self.route.grass then sections[#sections + 1] = { title = "Grass", tab = self.route.grass } end
-    if self.route.water then sections[#sections + 1] = { title = "Water", tab = self.route.water } end
-    return sections
-end
-
 function RoutePanel:_countEntries()
+    if not self.route then return 0 end
     local n = 0
-    for _, sec in ipairs(self:_sections()) do
-        if sec.tab and sec.tab.species then
-            n = n + #sec.tab.species
-        end
+    if self.route.grass and self.route.grass.species then
+        n = n + #self.route.grass.species
+    end
+    if self.route.water and self.route.water.species then
+        n = n + #self.route.water.species
     end
     return n
 end
 
 function RoutePanel:_sectionCount()
-    local n = 0
-    for _, sec in ipairs(self:_sections()) do
-        if sec.tab and sec.tab.species and #sec.tab.species > 0 then n = n + 1 end
-    end
-    return n
+    if not self.route then return 0 end
+    local sections = 0
+    if self.route.grass and self.route.grass.species and #self.route.grass.species > 0 then sections = sections + 1 end
+    if self.route.water and self.route.water.species and #self.route.water.species > 0 then sections = sections + 1 end
+    return sections
 end
 
 function RoutePanel:_wrappedHeight(w, h)
@@ -155,9 +148,8 @@ function RoutePanel:draw(ctx)
         local f10 = fonts:getFont(10)
         love.graphics.setFont(f10)
         Colors.set(cfg.COL.dim, 1)
-
-        local heading = tab.rate and (title .. " " .. tab.rate .. "%") or title
-        love.graphics.print(heading, math.floor(x+8), math.floor(cy))
+        local periodSuffix = tab.period and (" (" .. tab.period .. ")") or ""
+        love.graphics.print(title .. periodSuffix .. " " .. tab.rate .. "%", math.floor(x+8), math.floor(cy))
         cy = cy + SEC_HEADER_H
         for _, sp in ipairs(tab.species) do
             if cy + SEC_HEADER_H > maxCy then break end
@@ -189,11 +181,11 @@ function RoutePanel:draw(ctx)
         cy = cy + SEC_SPACING
     end
 
-    local hasAny = false
-    for _, sec in ipairs(self:_sections()) do
-        drawSec(sec.title, sec.tab)
-        if sec.tab and sec.tab.species and #sec.tab.species > 0 then hasAny = true end
-    end
+    drawSec("Grass", self.route.grass)
+    drawSec("Water", self.route.water)
+
+    local hasAny = (self.route.grass and self.route.grass.species and #self.route.grass.species > 0)
+                or (self.route.water and self.route.water.species and #self.route.water.species > 0)
     if not hasAny then
         if cy + NO_ENCOUNTERS_ROW_H <= maxCy then
             local f10 = fonts:getFont(10)

@@ -88,7 +88,7 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
             Colors.set(nameCol, 1)
         end
         if status and status ~= "" and status ~= "OK" then
-            local statusStr = " (" .. tostring(status) .. ")"
+            local statusStr = " (" .. Helpers.formatStatus(status) .. ")"
             Colors.set(cfg.COL.lo, 1)
             love.graphics.print(statusStr, math.floor(tx), math.floor(cy))
             tx = tx + f12:getWidth(statusStr)
@@ -200,7 +200,7 @@ function PokemonPanel:_drawCompactStrip(cfg, fonts, sprites, x, y, w, h)
         love.graphics.print(hpStr, math.floor(cellCx - fHp:getWidth(hpStr)/2), math.floor(rowY + iconSz + 2))
 
         if status and status ~= "" and status ~= "OK" then
-            local statusStr = tostring(status)
+            local statusStr = Helpers.formatStatus(status)
             love.graphics.setFont(fStatus)
             Colors.set(cfg.COL.lo, 1)
             love.graphics.print(statusStr, math.floor(cellCx - fStatus:getWidth(statusStr)/2),

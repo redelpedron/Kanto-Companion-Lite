@@ -45,7 +45,9 @@ end
 
 function BattleService:getEnemyMon()
     local battle = self:currentBattle()
-    local mon = battle and battle.enemy and battle.enemy.mon
+    local enemy = battle and battle.enemy
+
+    local mon = (type(enemy) == "table") and enemy.mon or nil
     if mon then return mon end
 
     return battle and battle.shownMon and battle.shownMon.enemy or nil
@@ -91,7 +93,9 @@ end
 function BattleService:getEnemyParty()
     local battle  = self:currentBattle()
     local trainer = self:getEnemyTrainer()
-    local enemy   = battle and battle.enemy
+    local enemyRaw = battle and battle.enemy
+
+    local enemy = (type(enemyRaw) == "table") and enemyRaw or nil
 
     if trainer then
         local parties = trainer.parties
