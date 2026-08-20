@@ -54,10 +54,21 @@ end
 
 ICONS.caught = function(cx, cy, s)
     local r = s * 0.5
+
+    love.graphics.push("all")
+    Colors.set({0.9, 0.15, 0.15}, 1)
+    love.graphics.arc("fill", "pie", cx, cy, r, math.pi, 2 * math.pi)
+    Colors.set({1, 1, 1}, 1)
+    love.graphics.arc("fill", "pie", cx, cy, r, 0, math.pi)
+    Colors.set({0, 0, 0}, 1)
+    love.graphics.setLineWidth(math.max(1, s * 0.08))
     love.graphics.circle("line", cx, cy, r)
     love.graphics.line(cx - r, cy, cx + r, cy)
-    love.graphics.circle("fill", cx, cy, r * 0.28)
-    love.graphics.circle("line", cx, cy, r * 0.28)
+    Colors.set({1, 1, 1}, 1)
+    love.graphics.circle("fill", cx, cy, r * 0.3)
+    Colors.set({0, 0, 0}, 1)
+    love.graphics.circle("line", cx, cy, r * 0.3)
+    love.graphics.pop()
 end
 
 ICONS.seen = function(cx, cy, s)

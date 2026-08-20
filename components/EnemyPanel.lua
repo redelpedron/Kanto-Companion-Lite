@@ -22,7 +22,6 @@ local SINGLE = {
     spriteScale   = 36,
     ballRadius    = 5,
     ballOffset    = 12,
-    ballDotRadius = 2,
     nameFontSize  = 13,
     typeSpacing   = 14,
     levelSpacing  = 20,
@@ -203,22 +202,12 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
     end
 
     if en.caught then
+
         local ballRadius = geom.ballRadius
         local ballX = x + geom.nameX - geom.ballOffset
         local ballY = cy + 4
-        Colors.set({1, 0.2, 0.2}, 1)
-        love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY - ballRadius),
-                               math.floor(ballRadius * 2), math.floor(ballRadius))
-        Colors.set({1, 1, 1}, 1)
-        love.graphics.rectangle("fill", math.floor(ballX - ballRadius), math.floor(ballY),
-                               math.floor(ballRadius * 2), math.floor(ballRadius))
-        Colors.set({0, 0, 0}, 1)
-        love.graphics.setLineWidth(1)
-        love.graphics.line(ballX - ballRadius, ballY, ballX + ballRadius, ballY)
-        Colors.set({1, 1, 1}, 1)
-        love.graphics.circle("fill", ballX, ballY, geom.ballDotRadius)
-        Colors.set({0, 0, 0}, 1)
-        love.graphics.circle("line", ballX, ballY, geom.ballDotRadius)
+        Colors.set(cfg.COL.hi, 1)
+        Helpers.drawIcon("caught", ballX, ballY, ballRadius * 2)
     end
 
     local fName = fonts:getFont(geom.nameFontSize)
@@ -331,7 +320,6 @@ function EnemyPanel:_drawTwoColumn(cfg, fonts, sprites, te, cr, x, y, w, h)
             spriteScale = 32,
             ballRadius = 4,
             ballOffset = 10,
-            ballDotRadius = 1.5,
             nameFontSize = 12,
             typeSpacing = 12,
             levelSpacing = 18,
@@ -348,7 +336,6 @@ function EnemyPanel:_drawTwoColumn(cfg, fonts, sprites, te, cr, x, y, w, h)
         spriteScale = 32,
         ballRadius = 4,
         ballOffset = 10,
-        ballDotRadius = 1.5,
         nameFontSize = 12,
         typeSpacing = 12,
         levelSpacing = 18,
@@ -399,7 +386,6 @@ function EnemyPanel:draw(ctx)
         spriteScale = SINGLE.spriteScale,
         ballRadius = SINGLE.ballRadius,
         ballOffset = SINGLE.ballOffset,
-        ballDotRadius = SINGLE.ballDotRadius,
         nameFontSize = SINGLE.nameFontSize,
         typeSpacing = SINGLE.typeSpacing,
         levelSpacing = SINGLE.levelSpacing,

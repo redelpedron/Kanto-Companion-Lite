@@ -164,7 +164,15 @@ function RoutePanel:draw(ctx)
             love.graphics.setFont(f11)
             Colors.set(cfg.COL.text, 1)
 
-            love.graphics.print(Helpers.sanitizeName(sp.name), math.floor(x+32), math.floor(cy))
+            local nameStr = Helpers.sanitizeName(sp.name)
+            love.graphics.print(nameStr, math.floor(x+32), math.floor(cy))
+            if sp.caught then
+
+                local ballCx = x + 32 + f11:getWidth(nameStr) + 9
+                local ballCy = cy + f11:getHeight() / 2
+                Colors.set(cfg.COL.hi, 1)
+                Helpers.drawIcon("caught", math.floor(ballCx), math.floor(ballCy), 10)
+            end
             local lv
             if sp.minLevel == sp.maxLevel then
                 lv = "Lv" .. sp.minLevel

@@ -53,6 +53,7 @@ function GameDataSystem:_buildContext()
         rates   = self.gameService:getGrowthRates(),
         growth  = self.gameService:getGrowthSystem(),
         badges  = self.gameService:getBadgeSystem(),
+        pokedex = self.gameService:getPokedex(),
         battleSvc = battleSvc,
         activeMon = battle and battle.player and battle.player.mon or nil,
     }
@@ -188,9 +189,10 @@ function GameDataSystem:_buildInventory()
     return inv
 end
 
-function GameDataSystem:_buildEncounterTable(part, dPoke, buckets)
+function GameDataSystem:_buildEncounterTable(part, dPoke, buckets, pokedex)
     if not part or not part.slots or (part.rate or 0) == 0 then return nil end
     local bk = part.buckets or buckets
+    local owned = pokedex and pokedex.owned
     local agg, order, prev = {}, {}, 0
     for i, slot in ipairs(part.slots) do
         local top = bk[i] or 256
@@ -217,13 +219,15 @@ function GameDataSystem:_buildEncounterTable(part, dPoke, buckets)
             pct = math.floor(a.weight / 256 * 100 + 0.5),
             minLevel = a.minL,
             maxLevel = a.maxL,
+
+            caught = (owned and owned[a.species] == true) or false,
         }
     end
     table.sort(list, function(x, y) return x.pct > y.pct end)
     return { rate = math.floor((part.rate or 0) / 256 * 100 + 0.5), species = list }
 end
 
-function GameDataSystem:_buildGen2EncounterTable(entry, dPoke, buckets, period)
+function GameDataSystem:_buildGen2EncounterTable(entry, dPoke, buckets, period, pokedex)
     if type(entry) ~= "table" or type(entry.slots) ~= "table" then return nil end
 
     local slots, rate, ownBuckets, timeBased
@@ -263,7 +267,7 @@ function GameDataSystem:_buildGen2EncounterTable(entry, dPoke, buckets, period)
     end
 
     local part = { slots = slots, rate = rate, buckets = entry.buckets or ownBuckets }
-    local built = self:_buildEncounterTable(part, dPoke, buckets)
+    local built = self:_buildEncounterTable(part, dPoke, buckets, pokedex)
     if built then built.timeBased = timeBased end
     return built
 end
@@ -283,8 +287,8 @@ function GameDataSystem:_buildRoute(ctx)
 
     local enc = (ctx.data.encounters or {})[mapId]
     if enc then
-        route.grass = self:_buildEncounterTable(enc.grass, ctx.dPoke, buckets)
-        route.water = self:_buildEncounterTable(enc.water, ctx.dPoke, buckets)
+        route.grass = self:_buildEncounterTable(enc.grass, ctx.dPoke, buckets, ctx.pokedex)
+        route.water = self:_buildEncounterTable(enc.water, ctx.dPoke, buckets, ctx.pokedex)
     end
 
     if (not route.grass) and (not route.water) and type(ctx.data.gen2Encounters) == "table" then
@@ -299,8 +303,8 @@ function GameDataSystem:_buildRoute(ctx)
         local grassEntry = type(ge.grass) == "table" and ge.grass[mapId] or nil
         local waterEntry = type(ge.water) == "table" and ge.water[mapId] or nil
 
-        local grass = self:_buildGen2EncounterTable(grassEntry, ctx.dPoke, buckets, period)
-        local water = self:_buildGen2EncounterTable(waterEntry, ctx.dPoke, buckets, period)
+        local grass = self:_buildGen2EncounterTable(grassEntry, ctx.dPoke, buckets, period, ctx.pokedex)
+        local water = self:_buildGen2EncounterTable(waterEntry, ctx.dPoke, buckets, period, ctx.pokedex)
 
         if grass and grass.timeBased then grass.period = periodLabel end
         if water and water.timeBased then water.period = periodLabel end
