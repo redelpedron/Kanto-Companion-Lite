@@ -78,6 +78,16 @@ function M.install(mod, saveSvc, locator)
             end,
             description = "SHOWS OR HIDES THE\nFPS COUNTER IN THE\fTOP BAR.",
         },
+        {
+            label = "SHOW BATTERY",
+            value = function()
+                return saveSvc:isBatteryVisible() and "ON" or "OFF"
+            end,
+            toggle = function()
+                saveSvc:toggleBatteryVisible()
+            end,
+            description = "SHOWS OR HIDES THE\nBATTERY %/CHARGING\fICON IN THE TOP BAR.\nLANDSCAPE ONLY.",
+        },
     }
 
     local function makeScreen(game)

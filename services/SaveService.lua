@@ -8,6 +8,7 @@ function SaveService.new(locator)
     self._visible = true
     self._topBarBottom = false
     self._showFps = true
+    self._showBattery = true
     return self
 end
 
@@ -16,6 +17,7 @@ function SaveService:setModSave(modSave)
     self:syncVisibility()
     self:syncTopBarBottom()
     self:syncShowFps()
+    self:syncShowBattery()
 end
 
 function SaveService:syncVisibility()
@@ -103,6 +105,35 @@ end
 
 function SaveService:toggleFpsVisible()
     self:setFpsVisible(not self._showFps)
+end
+
+function SaveService:syncShowBattery()
+    local ok, v = pcall(function()
+        return self._modSave:get("showBattery", true)
+    end)
+    self._showBattery = ok and (v ~= false)
+    local bus = self._locator:resolve("EventBus")
+    bus:publish("battery.visibility.changed", self._showBattery)
+end
+
+function SaveService:isBatteryVisible()
+    return self._showBattery
+end
+
+function SaveService:setBatteryVisible(val)
+    local ok, err = pcall(function()
+        self._modSave:set("showBattery", val)
+    end)
+    if ok then
+        self:syncShowBattery()
+    else
+        local log = self._locator:resolve("LogService")
+        if log then log:error("SaveService:setBatteryVisible: %s", tostring(err)) end
+    end
+end
+
+function SaveService:toggleBatteryVisible()
+    self:setBatteryVisible(not self._showBattery)
 end
 
 return SaveService

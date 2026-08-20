@@ -215,10 +215,19 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
     Colors.set(cfg.COL.text, 1)
     local nameStr = Helpers.sanitizeName(en.name)
     love.graphics.print(nameStr, math.floor(x+geom.nameX), math.floor(cy))
+    local tx = x + geom.nameX + fName:getWidth(nameStr)
+    if en.shiny then
+
+        local sparkleCx = tx + 7
+        local sparkleCy = cy + fName:getHeight() / 2
+        Colors.set(cfg.COL.gold, 1)
+        Helpers.drawIcon("sparkle", math.floor(sparkleCx), math.floor(sparkleCy), 11)
+        tx = tx + 14
+    end
 
     if (en.hp or 0) > 0 and en.status and en.status ~= "" and en.status ~= "OK" then
         Colors.set(cfg.COL.lo, 1)
-        love.graphics.print(" (" .. Helpers.formatStatus(en.status) .. ")", math.floor(x+geom.nameX+fName:getWidth(nameStr)), math.floor(cy))
+        love.graphics.print(" (" .. Helpers.formatStatus(en.status) .. ")", math.floor(tx), math.floor(cy))
     end
     local lvStr = "Lv" .. tostring(en.level or "?")
     love.graphics.setFont(f10)

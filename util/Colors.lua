@@ -21,6 +21,13 @@ function Colors.fpsColor(fps)
     else return {0.95, 0.3, 0.3} end
 end
 
+function Colors.batteryColor(percent, charging)
+    if charging then return {0.3, 0.9, 0.4} end
+    if percent > 50 then return {0.3, 0.9, 0.4}
+    elseif percent > 20 then return {0.95, 0.8, 0.2}
+    else return {0.95, 0.3, 0.3} end
+end
+
 function Colors.timeOfDayColor(hour)
     local isDay = hour >= 6 and hour < 18
     if isDay then

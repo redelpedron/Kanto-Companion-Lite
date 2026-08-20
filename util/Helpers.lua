@@ -28,6 +28,13 @@ function Helpers.getSafeInsets(cfg)
     return insets
 end
 
+function Helpers.getBatteryInfo()
+    if not (love and love.system and love.system.getPowerInfo) then return nil, nil end
+    local ok, state, percent = pcall(love.system.getPowerInfo)
+    if not ok or not state then return nil, nil end
+    return state, percent
+end
+
 local ICONS = {}
 
 ICONS.coin = function(cx, cy, s)
@@ -127,6 +134,20 @@ ICONS.bolt = function(cx, cy, s)
         cx - w * 0.12, cy + h / 2,
         cx + w * 0.32, cy - h * 0.08,
         cx + w * 0.02, cy - h * 0.08)
+end
+
+ICONS.sparkle = function(cx, cy, s)
+    local rOuter, halfW = s * 0.5, s * 0.09
+    for i = 0, 3 do
+        local a = -math.pi / 2 + i * (math.pi / 2)
+        local dx, dy = math.cos(a), math.sin(a)
+        local px, py = -dy, dx
+        local tipX, tipY = cx + dx * rOuter, cy + dy * rOuter
+        local b1x, b1y = cx + px * halfW, cy + py * halfW
+        local b2x, b2y = cx - px * halfW, cy - py * halfW
+        love.graphics.polygon("fill", tipX, tipY, b1x, b1y, b2x, b2y)
+    end
+    love.graphics.circle("fill", cx, cy, halfW)
 end
 
 function Helpers.drawIcon(name, cx, cy, size, bg)

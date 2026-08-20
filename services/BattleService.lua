@@ -161,6 +161,8 @@ function BattleService:getEnemyData()
         catchRate = def and def.catchRate or 0,
         status = eMon.status or "",
         caught = caught,
+
+        shiny = eMon.shiny == true,
     }
 end
 

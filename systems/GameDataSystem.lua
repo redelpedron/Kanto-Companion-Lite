@@ -78,6 +78,8 @@ function GameDataSystem:_buildParty(ctx)
             xpToNext = xpNext,
             pokemonData = ctx.dPoke,
             gender = Helpers.normalizeGender(mon.gender),
+
+            shiny = mon.shiny == true,
         }
     end
     return party

@@ -20,7 +20,7 @@ function TopBar:init()
     self:_listen("repel.updated",  function(_, r) self.repel = r or 0 end)
 end
 
-local function drawLandscape(self, cfg, fonts, ctx, showFps)
+local function drawLandscape(self, cfg, fonts, ctx, showFps, showBattery)
     local W    = ctx.w
     local topY = ctx.y or 0
     local h    = ctx.h or cfg.TOP_BAR_H
@@ -80,14 +80,27 @@ local function drawLandscape(self, cfg, fonts, ctx, showFps)
     end
 
     local rightElems = {}
+    if t.location and t.location ~= "" then
+        rightElems[#rightElems + 1] = { text = t.location, col = cfg.COL.xp }
+    end
     if showFps then
         local fps = love.timer and love.timer.getFPS and love.timer.getFPS()
         if fps then
             rightElems[#rightElems + 1] = { text = fps .. " FPS", col = Colors.fpsColor(fps) }
         end
     end
-    if t.location and t.location ~= "" then
-        rightElems[#rightElems + 1] = { text = t.location, col = cfg.COL.xp }
+    if showBattery then
+
+        local state, percent = Helpers.getBatteryInfo()
+        if percent then
+            local charging = (state == "charging" or state == "charged")
+            rightElems[#rightElems + 1] = {
+                text = math.floor(percent + 0.5) .. "%",
+                col = Colors.batteryColor(percent, charging),
+                icon = charging and "bolt" or "battery",
+                iconCol = charging and cfg.COL.gold or cfg.COL.dim,
+            }
+        end
     end
 
     local ok, now = pcall(os.date, "*t")
@@ -328,7 +341,9 @@ function TopBar:draw(ctx)
     if ctx.isPortrait then
         drawPortrait(self, cfg, fonts, ctx, showFps)
     else
-        drawLandscape(self, cfg, fonts, ctx, showFps)
+
+        local showBattery = self:_service("SaveService"):isBatteryVisible()
+        drawLandscape(self, cfg, fonts, ctx, showFps, showBattery)
     end
 end
 

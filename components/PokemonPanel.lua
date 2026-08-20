@@ -100,6 +100,14 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
             tx = tx + f12:getWidth(symbol)
             Colors.set(nameCol, 1)
         end
+        if m.shiny then
+
+            local sparkleCx = tx + 7
+            local sparkleCy = cy + f12:getHeight() / 2
+            Colors.set(cfg.COL.gold, 1)
+            Helpers.drawIcon("sparkle", math.floor(sparkleCx), math.floor(sparkleCy), 11)
+            tx = tx + 14
+        end
 
         if (not fainted) and status and status ~= "" and status ~= "OK" then
             local statusStr = " (" .. Helpers.formatStatus(status) .. ")"
