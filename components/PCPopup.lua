@@ -529,13 +529,14 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
             local typeX = nx
             if def and def.types then
                 if type(def.types) == "table" then
-                    for idx, t in ipairs(def.types) do
+                    local dedupedTypes = TypeColors.dedupe(def.types)
+                    for idx, t in ipairs(dedupedTypes) do
                         local typeName = TypeColors.normalize(tostring(t))
                         local typeColor = TypeColors.getColor(typeName)
                         Colors.set(typeColor, 1)
                         love.graphics.print(typeName, math.floor(typeX), math.floor(typeY))
                         typeX = typeX + f9:getWidth(typeName)
-                        if idx < #def.types then
+                        if idx < #dedupedTypes then
                             Colors.set(cfg.COL.dim, 0.7)
                             love.graphics.print("/", math.floor(typeX), math.floor(typeY))
                             typeX = typeX + f9:getWidth("/")

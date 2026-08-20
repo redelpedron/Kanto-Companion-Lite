@@ -35,6 +35,8 @@ function TypeEffectiveness:effectiveness(moveId, defenderTypes)
     local atkType = TypeColors.normalize(moveData.type or moveData.typeName or "")
     if atkType == "" then return 10 end
 
+    defenderTypes = TypeColors.dedupe(defenderTypes)
+
     local ok, mult = pcall(self._typeChart.effectiveness, atkType, defenderTypes)
     if ok and type(mult) == "number" then
         return mult

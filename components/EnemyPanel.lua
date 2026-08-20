@@ -239,7 +239,7 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
         local tx = x + geom.nameX
         local f9 = fonts:getFont(9)
         love.graphics.setFont(f9)
-        for _, t2 in ipairs(en.types) do
+        for _, t2 in ipairs(TypeColors.dedupe(en.types)) do
             local tname = TypeColors.normalize(t2)
             if tname ~= "" then
                 Colors.set(TypeColors.getColor(tname), 1)

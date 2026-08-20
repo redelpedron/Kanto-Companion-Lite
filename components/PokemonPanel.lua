@@ -119,7 +119,7 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
         if m.types then
             local f9 = fonts:getFont(9)
             love.graphics.setFont(f9)
-            for _, t2 in ipairs(m.types) do
+            for _, t2 in ipairs(TypeColors.dedupe(m.types)) do
                 local tname = TypeColors.normalize(t2)
                 if tname ~= "" then
                     Colors.set(TypeColors.getColor(tname), 1)

@@ -34,4 +34,17 @@ function TypeColors.getColor(typeName)
     return TYPE[TypeColors.normalize(typeName)] or DEFAULT_COLOR
 end
 
+function TypeColors.dedupe(types)
+    if type(types) ~= "table" then return types end
+    local out, seen = {}, {}
+    for _, t in ipairs(types) do
+        local norm = TypeColors.normalize(t)
+        if norm ~= "" and not seen[norm] then
+            seen[norm] = true
+            out[#out + 1] = t
+        end
+    end
+    return out
+end
+
 return TypeColors
