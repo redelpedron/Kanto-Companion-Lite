@@ -4,6 +4,7 @@ local Helpers   = require("util.Helpers")
 local Viewport  = require("util.Viewport")
 local TypeColors = require("util.TypeColors")
 local ScrollableMixin = require("util.ScrollableMixin")
+local JohtoDex  = require("util.JohtoDex")
 
 local PCPopup = setmetatable({}, { __index = Component })
 PCPopup.__index = PCPopup
@@ -19,6 +20,9 @@ function PCPopup.new(locator, props)
     self.boxView  = 1
     self.status   = nil
     self.statusAt = 0
+
+    self.sortMode = nil
+    self.sortDir  = 1
     self._hit     = {}
 
     self:_scrollInit()
@@ -217,6 +221,53 @@ function PCPopup:_handleBoxesClick(tag, data)
         end
         return
     end
+
+    if tag == "boxsort" then
+
+        if self.sortMode == data.mode then
+            self.sortDir = -self.sortDir
+        else
+            self.sortMode = data.mode
+            self.sortDir = 1
+        end
+        local dPoke = self:_service("GameService"):getPokemonData()
+        local comparator = self:_boxSortComparator(self.sortMode, self.sortDir, dPoke)
+
+        local ok, err = pc:sortAllBoxes(comparator)
+        self:_setStatus(ok and "Sorted all boxes" or err)
+        return
+    end
+end
+
+function PCPopup:_boxSortComparator(mode, dir, dPoke)
+    local function displayName(m)
+        local def = dPoke[m.species]
+        return Helpers.sanitizeName(m.nickname or (def and def.name) or m.species)
+    end
+    local function oldDex(m)
+        local def = dPoke[m.species]
+        return (def and def.dex) or math.huge
+    end
+
+    if mode == "alpha" then
+        return function(a, b)
+            local an, bn = displayName(a), displayName(b)
+            if dir > 0 then return an < bn else return an > bn end
+        end
+    elseif mode == "olddex" then
+        return function(a, b)
+            local ad, bd = oldDex(a), oldDex(b)
+            if dir > 0 then return ad < bd else return ad > bd end
+        end
+    elseif mode == "newdex" then
+        return function(a, b)
+            local ao, bo = oldDex(a), oldDex(b)
+            local an = (ao ~= math.huge and JohtoDex.newDexNumber(ao)) or math.huge
+            local bn = (bo ~= math.huge and JohtoDex.newDexNumber(bo)) or math.huge
+            if dir > 0 then return an < bn else return an > bn end
+        end
+    end
+    return nil
 end
 
 function PCPopup:_computeLayout(W, H)
@@ -447,7 +498,7 @@ function PCPopup:_drawBoxesTab(L, cfg, fonts)
     local p1, p2 = self:_splitPanels(bx, by, bw, bh, L.portrait)
 
     self:_drawPartyPanel(p1, cfg, fonts, sprites, dPoke, pc)
-    self:_drawBoxPanel(p2, cfg, fonts, sprites, dPoke, pc)
+    self:_drawBoxPanel(p2, cfg, fonts, sprites, dPoke, pc, L.portrait)
 end
 
 function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
@@ -586,7 +637,7 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
     end
 end
 
-function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc)
+function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc, portrait)
     Colors.set(cfg.COL.panelTop, 0.9)
     love.graphics.rectangle("fill", math.floor(p.x), math.floor(p.y), math.floor(p.w), math.floor(p.h))
     Colors.set(cfg.COL.border, 0.3)
@@ -638,7 +689,43 @@ function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc)
     Colors.set(cfg.COL.text, 1)
     love.graphics.print(">", math.floor(nextX + 8), math.floor(navY + 2))
 
-    local railY = p.y + 40
+    local afterNavY = navY + 30
+    if not portrait then
+        local isGen2 = self:_service("GameService"):isGen2()
+
+        local sortBtns = { { mode = "alpha", label = "A-Z" }, { mode = "olddex", label = isGen2 and "OLD #" or "DEX #" } }
+        if isGen2 then
+            sortBtns[#sortBtns + 1] = { mode = "newdex", label = "NEW #" }
+        end
+        local sortY, sortH, sortGap = afterNavY, 18, 4
+        local btnW = (p.w - 16 - (#sortBtns - 1) * sortGap) / #sortBtns
+        local f9s = fonts:getFont(9)
+        for i, b in ipairs(sortBtns) do
+            local bx = p.x + 8 + (i - 1) * (btnW + sortGap)
+            self:_hitRegion(bx, sortY, btnW, sortH, "boxsort", { mode = b.mode })
+            local active = self.sortMode == b.mode
+            Colors.set(active and cfg.COL.gold or cfg.COL.tabBg, active and 0.9 or 0.75)
+            love.graphics.rectangle("fill", math.floor(bx), math.floor(sortY), math.floor(btnW), sortH)
+            love.graphics.setFont(f9s)
+            Colors.set(active and cfg.COL.panel or cfg.COL.dim, 1)
+            local lw = f9s:getWidth(b.label)
+            love.graphics.print(b.label, math.floor(bx + btnW / 2 - lw / 2), math.floor(sortY + 4))
+            if active then
+
+                local triCx = bx + btnW / 2 + lw / 2 + 8
+                local triCy = sortY + sortH / 2
+                Colors.set(cfg.COL.panel, 1)
+                if self.sortDir > 0 then
+                    love.graphics.polygon("fill", triCx - 3, triCy + 2, triCx + 3, triCy + 2, triCx, triCy - 3)
+                else
+                    love.graphics.polygon("fill", triCx - 3, triCy - 2, triCx + 3, triCy - 2, triCx, triCy + 3)
+                end
+            end
+        end
+        afterNavY = sortY + sortH + 6
+    end
+
+    local railY = afterNavY
     local railH = 22
     local railGap = 2
     local tabW = (p.w - 16 - (n - 1) * railGap) / n

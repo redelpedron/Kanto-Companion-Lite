@@ -166,6 +166,59 @@ function PCService:setCurrentBox(n)
     return true
 end
 
+function PCService:_flattenAndRedistribute(comparator)
+    local boxes = self:getBoxes()
+    local n = self:getBoxCount()
+    local cap = self:getBoxCapacity()
+
+    local flat = {}
+    for i = 1, n do
+        local arr = boxes[i]
+        if arr then
+            for _, mon in ipairs(arr) do
+                flat[#flat + 1] = mon
+            end
+        end
+    end
+
+    if comparator then
+        table.sort(flat, comparator)
+    end
+
+    local idx = 1
+    for i = 1, n do
+        local arr = boxes[i]
+        if not arr then
+            arr = {}
+            boxes[i] = arr
+        end
+        for j = #arr, 1, -1 do
+            table.remove(arr, j)
+        end
+        for _ = 1, cap do
+            if idx > #flat then break end
+            arr[#arr + 1] = flat[idx]
+            idx = idx + 1
+        end
+    end
+
+    if idx <= #flat then
+        local lastArr = boxes[n]
+        for i = idx, #flat do
+            lastArr[#lastArr + 1] = flat[i]
+        end
+    end
+end
+
+function PCService:sortAllBoxes(comparator)
+    if type(comparator) ~= "function" then return false, "No sort selected" end
+    local save = self:getSave()
+    if not save then return false, "No save loaded" end
+    local ok, err = pcall(function() self:_flattenAndRedistribute(comparator) end)
+    if not ok then return false, tostring(err) end
+    return true
+end
+
 function PCService:getBoxes()
     local save = self:getSave()
     local b = self:_boxes()
