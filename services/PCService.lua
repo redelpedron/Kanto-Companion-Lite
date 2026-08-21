@@ -156,6 +156,16 @@ function PCService:getCurrentBox()
     return (save and save.currentBox) or 1
 end
 
+function PCService:setCurrentBox(n)
+    local save = self:getSave()
+    if not save then return false end
+    if type(n) ~= "number" or n < 1 or n > self:getBoxCount() then
+        return false
+    end
+    save.currentBox = n
+    return true
+end
+
 function PCService:getBoxes()
     local save = self:getSave()
     local b = self:_boxes()

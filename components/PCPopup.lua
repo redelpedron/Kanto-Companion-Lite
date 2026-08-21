@@ -203,6 +203,8 @@ function PCPopup:_handleBoxesClick(tag, data)
             self.heldMon = nil
         end
         self.boxView = data.box
+
+        pc:setCurrentBox(data.box)
         return
     end
 
@@ -602,6 +604,12 @@ function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc)
     Colors.set(cfg.COL.text, 1)
     love.graphics.print("BOXES", math.floor(p.x + 8), math.floor(p.y + 6))
 
+    local defaultBox = pc:getCurrentBox()
+    local f9 = fonts:getFont(9)
+    love.graphics.setFont(f9)
+    Colors.set(cfg.COL.hi, 1)
+    love.graphics.print("Default: Box " .. defaultBox, math.floor(p.x + 8), math.floor(p.y + 23))
+
     local navY = p.y + 6
     local navW = 22
     local label = "Box " .. cur .. "  " .. #box .. "/" .. cap
@@ -630,7 +638,7 @@ function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc)
     Colors.set(cfg.COL.text, 1)
     love.graphics.print(">", math.floor(nextX + 8), math.floor(navY + 2))
 
-    local railY = p.y + 30
+    local railY = p.y + 40
     local railH = 22
     local railGap = 2
     local tabW = (p.w - 16 - (n - 1) * railGap) / n
@@ -643,6 +651,13 @@ function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc)
             self:_hitRegion(tx, railY, tabW, railH, "boxtab", { box = i })
             Colors.set(sel and cfg.COL.gold or cfg.COL.tabBg, sel and 0.9 or (cnt == 0 and 0.35 or 0.75))
             love.graphics.rectangle("fill", math.floor(tx), math.floor(railY), math.floor(tabW), railH)
+            if i == defaultBox then
+
+                Colors.set(cfg.COL.hi, 1)
+                love.graphics.setLineWidth(2)
+                love.graphics.rectangle("line", math.floor(tx) + 1, math.floor(railY) + 1, math.floor(tabW) - 2, railH - 2)
+                love.graphics.setLineWidth(1)
+            end
             local f10 = fonts:getFont(10)
             love.graphics.setFont(f10)
             Colors.set(sel and cfg.COL.panel or cfg.COL.dim, 1)
