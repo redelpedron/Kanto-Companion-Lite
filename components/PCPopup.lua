@@ -498,7 +498,7 @@ function PCPopup:_drawBoxesTab(L, cfg, fonts)
     local p1, p2 = self:_splitPanels(bx, by, bw, bh, L.portrait)
 
     self:_drawPartyPanel(p1, cfg, fonts, sprites, dPoke, pc)
-    self:_drawBoxPanel(p2, cfg, fonts, sprites, dPoke, pc, L.portrait)
+    self:_drawBoxPanel(p2, cfg, fonts, sprites, dPoke, pc)
 end
 
 function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
@@ -637,7 +637,7 @@ function PCPopup:_drawPartyPanel(p, cfg, fonts, sprites, dPoke, pc)
     end
 end
 
-function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc, portrait)
+function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc)
     Colors.set(cfg.COL.panelTop, 0.9)
     love.graphics.rectangle("fill", math.floor(p.x), math.floor(p.y), math.floor(p.w), math.floor(p.h))
     Colors.set(cfg.COL.border, 0.3)
@@ -690,7 +690,7 @@ function PCPopup:_drawBoxPanel(p, cfg, fonts, sprites, dPoke, pc, portrait)
     love.graphics.print(">", math.floor(nextX + 8), math.floor(navY + 2))
 
     local afterNavY = navY + 30
-    if not portrait then
+    do
         local isGen2 = self:_service("GameService"):isGen2()
 
         local sortBtns = { { mode = "alpha", label = "A-Z" }, { mode = "olddex", label = isGen2 and "OLD #" or "DEX #" } }
