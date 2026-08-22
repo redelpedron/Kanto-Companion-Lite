@@ -17,14 +17,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
+      - name: Set version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Create ZIP archive
         run: |
-          zip -r "Kanto.Companion.Lite.zip" . \
+          zip -r "Kanto.Companion.Lite-${VERSION}.zip" . \
             -x ".git/*" \
                ".git" \
                ".github/workflows/*"
@@ -36,4 +34,4 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            Kanto.Companion.Lite.zip
+            Kanto.Companion.Lite-${{ env.VERSION }}.zip
