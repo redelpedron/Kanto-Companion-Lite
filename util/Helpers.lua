@@ -252,6 +252,11 @@ function Helpers.formatStatus(status)
     return STATUS_ABBR[key] or s
 end
 
+function Helpers.isFainted(hp, maxhp)
+    if maxhp == nil then return false end
+    return (hp or 0) <= 0
+end
+
 function Helpers.expProgress(growth, def, mon, rates)
 
     local exp = mon.exp or mon.experience

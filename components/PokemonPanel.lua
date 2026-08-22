@@ -71,7 +71,7 @@ function PokemonPanel:_drawFullRows(cfg, fonts, sprites, te, x, y, w, h)
         local hp, maxhp, status = self:_liveStats(m)
 
         local known = maxhp ~= nil
-        local fainted = known and (hp or 0) <= 0
+        local fainted = Helpers.isFainted(hp, maxhp)
 
         local nameCol = cfg.COL.text
         if fainted then
@@ -213,7 +213,7 @@ function PokemonPanel:_drawCompactStrip(cfg, fonts, sprites, x, y, w, h)
         local hp, maxhp, status = self:_liveStats(m)
 
         local known = maxhp ~= nil
-        local fainted = known and (hp or 0) <= 0
+        local fainted = Helpers.isFainted(hp, maxhp)
         local frac = known and Math.clamp((hp or 0) / math.max(1, maxhp), 0, 1) or 0
         local hpStr = known and (tostring(hp or 0) .. "/" .. tostring(maxhp)) or "?/?"
 

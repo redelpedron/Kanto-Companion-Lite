@@ -225,7 +225,7 @@ function EnemyPanel:_drawContent(cfg, fonts, sprites, te, cr, geom)
         tx = tx + 14
     end
 
-    if (en.hp or 0) > 0 and en.status and en.status ~= "" and en.status ~= "OK" then
+    if (not Helpers.isFainted(en.hp, en.maxhp)) and en.status and en.status ~= "" and en.status ~= "OK" then
         Colors.set(cfg.COL.lo, 1)
         love.graphics.print(" (" .. Helpers.formatStatus(en.status) .. ")", math.floor(tx), math.floor(cy))
     end
